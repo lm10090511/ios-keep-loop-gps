@@ -728,6 +728,7 @@ class App:
         self.ddi_state = "未知"
         self._last_track = None
         self._finished_said = False
+        self._kill_said = ""
 
         self._build_ui()
         self._load_route(ROUTES[0][1])
@@ -853,6 +854,17 @@ class App:
         self.goal_lbl = ttk.Label(row3, text="", foreground="#2a7",
                                   font=("Microsoft YaHei", 9))
         self.goal_lbl.pack(side="left", padx=(10, 0))
+
+        row4 = ttk.Frame(ctrl)
+        row4.pack(fill="x", pady=(6, 0))
+        self.autokill_var = tk.BooleanVar(value=True)
+        self.autokill_chk = ttk.Checkbutton(
+            row4, text="跑够后自动结束 Keep（清理后台）",
+            variable=self.autokill_var, command=self._on_autokill)
+        self.autokill_chk.pack(side="left")
+        self.kill_lbl = ttk.Label(row4, text="", foreground="#666",
+                                  font=("Microsoft YaHei", 9))
+        self.kill_lbl.pack(side="left", padx=(10, 0))
 
         # 状态栏
         bar = ttk.Frame(self.root, padding=(10, 4, 10, 8))
@@ -1052,6 +1064,15 @@ class App:
         self.goal_var.set("%g" % km)
         self._on_goal()
 
+    def _on_autokill(self):
+        on = bool(self.autokill_var.get())
+        self.runner.set_auto_kill(on)
+        self._log("跑够后自动结束 App：%s" % ("开" if on else "关"))
+        if on:
+            self._log("（跑够后会结束 Keep 进程，它会停在跑够时的记录；"
+                      "回 Keep 点「继续」就能看到这条记录）")
+        self._state()
+
     # -- 按钮 -------------------------------------------------------------- #
     def _start(self):
         if not self.route_wgs:
@@ -1067,9 +1088,15 @@ class App:
                 self._check_ddi_now(mount=True)
         self.runner.err = None
         self.runner.start()
-        self.btn_start.configure(state="disabled")
-        self.btn_pause.configure(state="normal", text="⏸  暂停")
-        self.btn_stop.configure(state="normal")
+        if self.runner.holding:
+            # 还处在「定位冻结在终点」：点开始只是开新一轮，服务一直在跑
+            self.btn_start.configure(state="normal", text="▶  新一轮")
+            self.btn_pause.configure(state="disabled", text="⏸  暂停")
+            self.btn_stop.configure(state="normal")
+        else:
+            self.btn_start.configure(state="disabled", text="▶  开始")
+            self.btn_pause.configure(state="normal", text="⏸  暂停")
+            self.btn_stop.configure(state="normal")
 
     def _pause(self):
         if self.runner.paused:
@@ -1081,7 +1108,7 @@ class App:
 
     def _stop(self):
         self.runner.stop()
-        self.btn_start.configure(state="normal")
+        self.btn_start.configure(state="normal", text="▶  开始")
         self.btn_pause.configure(state="disabled", text="⏸  暂停")
         self.btn_stop.configure(state="disabled")
 
@@ -1200,15 +1227,26 @@ class App:
                 foreground="#0b8f57" if pct >= 100 else "#2a7")
         else:
             self.goal_lbl.configure(text="不限", foreground="#666")
-        # 跑够目标距离自动停了：按钮恢复
+        # 跑够目标距离后进入「定位冻结在终点」状态：不是停了，服务还在推同一个点。
         if r.finished and self._finished_said is False:
             self._finished_said = True
-            self.btn_start.configure(state="normal")
+            self.btn_start.configure(state="normal", text="▶  新一轮")
             self.btn_pause.configure(state="disabled", text="⏸  暂停")
-            self.btn_stop.configure(state="disabled")
-            self._log("已跑够 %.2f km，自动停止" % (r.dist / 1000.0))
+            self.btn_stop.configure(state="normal")
+            self._log("已跑够 %.2f km —— 定位停在终点不动。" % (r.dist / 1000.0))
+            if not r.auto_kill:
+                self._log("现在去手机上把 Keep 结束掉，回来点「停止」恢复真实定位。")
         if not r.finished:
             self._finished_said = False
+            if self.btn_start.cget("text") == "▶  新一轮":
+                self.btn_start.configure(text="▶  开始")
+        # 自动结束 App 的结果
+        ks = getattr(r, "kill_state", "") or ""
+        if ks != getattr(self, "_kill_said", ""):
+            self._kill_said = ks
+            self.kill_lbl.configure(
+                text=ks, foreground="#d70015" if ("失败" in ks or ks.startswith("✗"))
+                else ("#0b8f57" if ks else "#666"))
 
     def _tick(self):
         r = self.runner

@@ -36,3 +36,4 @@ _*.js
 _*.py
 _*.cjs
 _*.mjs
+_ref/

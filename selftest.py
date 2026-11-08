@@ -421,6 +421,12 @@ def t_privacy():
     files += glob.glob("*.json")
     files = [f for f in files if os.path.isfile(f) and f != "selftest.py"]
 
+    # README 顶部的 Star 徽章必须带仓库所有者名（shields.io 的 URL 就是这么拼的），
+    # 而仓库地址本来就是公开的，所以这一行不算泄露。其余地方一律不许出现。
+    allow = {
+        "GitHub 用户名": [("README.md", r"img\.shields\.io/github/stars/")],
+    }
+
     for label, pat in pats.items():
         hits = []
         for f in files:
@@ -430,6 +436,9 @@ def t_privacy():
                 continue
             for m in re.finditer(pat, txt):
                 line = txt[:m.start()].count("\n") + 1
+                src = txt.splitlines()[line - 1] if line - 1 < len(txt.splitlines()) else ""
+                if any(f == af and re.search(apat, src) for af, apat in allow.get(label, ())):
+                    continue
                 hits.append("%s:%d" % (f, line))
         if hits:
             bad("无「%s」" % label, ", ".join(hits[:3]))
@@ -451,7 +460,8 @@ def t_privacy():
             top = m.group(1).split(".")[0]
             third.add(top)
     local = {"coord", "ios_loop_gps", "runner", "check_ddi",
-             "mount_ddi_auto", "web_gui", "gps_gui", "presets", "geosearch"}
+             "mount_ddi_auto", "web_gui", "gps_gui", "presets", "geosearch",
+             "killapp"}
     std = set(sys.stdlib_module_names) if hasattr(sys, "stdlib_module_names") else set()
     unknown = sorted(third - local - std - {"PIL"})
     if unknown:

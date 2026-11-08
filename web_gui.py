@@ -487,6 +487,15 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": True, "goal": g})
                 return
 
+            if path == "/api/autokill":
+                on = bool(d.get("on", True))
+                bundle = (d.get("bundle") or "").strip() or None
+                ST.runner.set_auto_kill(on, bundle)
+                log("跑够后自动结束 App：%s" % ("开" if on else "关"))
+                self._json({"ok": True, "on": on,
+                            "bundle": ST.runner.kill_bundle})
+                return
+
             if path == "/api/start":
                 if not ST.route_wgs:
                     self._json({"ok": False, "error": "还没有路线"}, 400)

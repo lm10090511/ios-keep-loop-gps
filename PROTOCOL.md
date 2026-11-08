@@ -197,3 +197,88 @@ ReceiveBytes {ImageSize, ImageType:"Developer", ImageSignature}
 
 DDI 镜像需要与 iOS 版本匹配，且 15.x 之后需要 Apple TSS 个性化签名
 （本项目的做法：复用爱思助手已经下好的镜像，它内部有自己的签名通道）。
+
+## ⑨ DTX：结束手机上的 App（`processcontrol`）
+
+未越狱的 iOS 没有对外开「点界面」的通道（`com.apple.dt.testmanagerd`、
+`com.apple.accessibility.axAuditDaemon`、`com.apple.mobile.launchservices`
+全部 `InvalidService`），但 Instruments 的 DTX 服务是开着的：
+
+```
+StartService("com.apple.instruments.remoteserver.DVTSecureSocketProxy")
+  → 端口上直接跑 DTX 帧
+```
+
+### 帧格式
+
+Fragment 头 **32 字节**（`<IIHHIIIiI`，小端）：
+
+| 偏移 | 类型 | 字段 |
+|---|---|---|
+| 0 | u32 | magic = `0x1F3D5B79` |
+| 4 | u32 | header_size（通常 32，更大时需跳过额外字节） |
+| 8 | u16 | index（片号，从 0 开始） |
+| 10 | u16 | count（总片数） |
+| 12 | u32 | data_size |
+| 16 | u32 | identifier |
+| 20 | u32 | conversation_index |
+| 24 | i32 | channel_code（`conversation_index % 2 != 0` 时取负） |
+| 28 | u32 | flags |
+
+紧跟着是 **16 字节 payload 头**（`<BBBBIII`）：`msg_type` | `flags_a` | `flags_b` |
+`reserved` | `aux_size` | `total_size`（= aux + payload） | `flags`。
+
+`msg_type`：OK=0 / DATA=1 / DISPATCH=2 / OBJECT=3 / ERROR=4 / BARRIER=5 /
+PRIMITIVE=6 / COMPRESSED=7 / PROXIED_MESSAGE=8。
+
+**多片重组**：`count == 1` 时直接读 `data_size` 字节；`count > 1` 时
+**index==0 那片的 `data_size` 是「装配后的总长度」，本身不带 body**，
+后续 `index > 0` 的片各带自己的 `data_size` 字节 body。
+
+### 参数（Aux）编码
+
+16 字节头 `struct.pack("<IIQ", 0x1F0, 0, body_len)` + `(key, value)` 对。
+key 恒为 `PNULL`（wire type 10）。value 是 primitive，tag 为 u32（低 8 位是类型）：
+
+| 类型 | tag | 编码 |
+|---|---|---|
+| Null | 10 | 无值 |
+| String | 1 | u32 长度 + UTF-8 |
+| Buffer | 2 | u32 长度 + 原始字节 |
+| Int32 | 3 | i32 |
+| Int64 | 6 | i64 |
+| Double | 9 | f64 |
+
+**关键坑**：`processIdentifierForBundleIdentifier:`、`killPid:` 的参数不是
+primitive String / Int32，而是 **NSKeyedArchiver 编码的 Buffer**。
+用 `p_str()` / `p_i32()` 会被设备直接断链。
+
+### 握手与开通道
+
+```
+channel 0  DISPATCH "_notifyOfPublishedCapabilities:"
+           参数 = Buffer(archive({"com.apple.private.DTXBlockCompression": 0,
+                                  "com.apple.private.DTXConnection": 1}))
+        ←  DISPATCH 同名 selector，带对端 capabilities（iOS 15.7.3 是 107 项）
+
+channel 0  DISPATCH "_requestChannelWithCode:identifier:"
+           参数 = [Int32(code), Buffer(archive(identifier))]
+        ←  OK (msg_type = 0)
+```
+
+对端 capabilities 里 `com.apple.instruments.server.services.processcontrol` 的值
+（实测 107）就是这个通道的 code。
+
+### 用法
+
+```
+processIdentifierForBundleIdentifier: Buffer(archive("com.gotokeep.keep"))  →  pid
+killPid:                              Buffer(archive(pid))                 →  （不等回复）
+```
+
+`flags = 0` 表示不期待回复（`EXPECTS_REPLY` 是 `1 << 0`）。
+
+只读的 `deviceinfo.runningProcesses`（通道 code 113）返回 list of dict，
+字段 `name` / `pid` / `isApplication` / `realAppName`，可用来列进程。
+
+实现见 `killapp.py`。

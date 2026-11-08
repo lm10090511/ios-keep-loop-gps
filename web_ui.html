@@ -284,6 +284,12 @@
       <div class="kv" style="margin-top:5px">
         <span>进度</span><span id="vGoalPct" style="color:#8fd9b3">—</span>
       </div>
+      <label class="kv" style="margin-top:6px;cursor:pointer;align-items:flex-start;gap:6px">
+        <input id="cbAutoKill" type="checkbox" checked
+               style="margin:2px 0 0;flex:0 0 auto;accent-color:#3ddc97;cursor:pointer">
+        <span style="color:#cfe0f8;font-size:12px;line-height:1.45">跑够后自动结束 Keep（清理后台）</span>
+      </label>
+      <div id="vKillState" style="color:#6d7c99;font-size:11.5px;line-height:1.5;margin-top:2px"></div>
       <div style="color:#6d7c99;font-size:11.5px;line-height:1.5;margin-top:3px">
         填 0 = 一直循环不停
       </div>
@@ -307,6 +313,7 @@
       <h2>状态</h2>
       <div class="kv"><span>DDI</span><span id="vDdi"><span class="pill wait">检查中</span></span></div>
       <div class="kv"><span>设备</span><span id="vDev">—</span></div>
+      <div class="kv"><span>运行</span><span id="vRun">未开始</span></div>
       <div class="kv"><span>已跑</span><span class="big-num" id="vDist">0.00 km</span></div>
       <div class="kv"><span>圈数</span><span id="vLap">0</span></div>
       <div class="kv"><span>已发点</span><span id="vSent">0</span></div>
@@ -1161,9 +1168,28 @@ async function refresh(force){
   }
   if (r.finished && !state.finishedSaid){
     state.finishedSaid = true;
-    showTip("已跑够 " + (goal / 1000).toFixed(1) + " km，自动停了");
+    showTip(r.autoKill
+      ? "已跑够 " + (goal / 1000).toFixed(1) + " km —— 定位停在终点，正在结束 Keep"
+      : "已跑够 " + (goal / 1000).toFixed(1) + " km —— 定位停在终点不动。现在去手机上结束 Keep，回来点「停止」恢复真实定位");
   }
   if (!r.finished) state.finishedSaid = false;
+
+  /* 自动结束 App 的结果 */
+  const ks = r.killState || "";
+  $("vKillState").textContent = ks;
+  $("vKillState").style.color = ks.indexOf("✗") === 0 || ks.indexOf("失败") >= 0
+    ? "#ff8b8b" : (ks ? "#8fd9b3" : "#6d7c99");
+  if (r.autoKill !== undefined && $("cbAutoKill").checked !== !!r.autoKill){
+    $("cbAutoKill").checked = !!r.autoKill;
+  }
+
+  /* 运行状态徽章：跑够之后是「定位冻结在终点」，不是「停了」 */
+  $("vRun").innerHTML = r.holding
+    ? '<span class="pill wait">已跑够 · 定位冻结在终点</span>'
+    : (r.running
+        ? (r.paused ? '<span class="pill wait">已暂停</span>'
+                    : '<span class="pill ok">运行中</span>')
+        : '<span class="pill no">未开始</span>');
 
   const paceSec = r.speed > 0 ? 1000 / r.speed : 0;
   $("vPace").textContent = paceSec ? fmtPace(paceSec) : "—";
@@ -1172,10 +1198,11 @@ async function refresh(force){
     slider.value = String(clamp(Math.round(paceSec), 180, 900));
   }
 
-  $("btnStart").disabled = r.running && !r.paused;
-  $("btnPause").disabled = !r.running;
+  $("btnStart").disabled = r.running && !r.paused && !r.holding;
+  $("btnPause").disabled = !r.running || r.holding;
   $("btnStop").disabled = !r.running;
-  $("btnStart").textContent = r.paused ? "▶ 继续" : "▶ 开始";
+  $("btnStart").textContent = r.holding ? "▶ 开始新一轮"
+                            : (r.paused ? "▶ 继续" : "▶ 开始");
 
   /* 标记 */
   if (r.currentGcj){
@@ -1260,6 +1287,17 @@ document.querySelectorAll("[data-goal]").forEach(b => {
       x.classList.toggle("on", x === b));
     await applyGoal();
   };
+});
+
+/* 跑够后自动结束 Keep */
+$("cbAutoKill").addEventListener("change", async e => {
+  const r = await post("/api/autokill", { on: e.target.checked });
+  if (r.ok){
+    showTip(e.target.checked
+      ? "跑够后会结束 Keep 的进程（清理后台，它会停在跑够时的记录）"
+      : "跑够后不结束 Keep，需要你手动去点结束");
+    refresh();
+  }
 });
 
 $("btnStart").onclick = async () => {

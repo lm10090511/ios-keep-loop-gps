@@ -36,6 +36,11 @@ class Runner:
         self.lost = 0
         self.goal = 0.0         # 目标距离（米），0 = 不限，跑到就自动停
         self.finished = False   # 是否因为跑够目标距离而自动停
+        self.holding = False    # 跑够之后是否正在「停在终点保持定位」
+        self.auto_kill = True   # 跑够后是否自动结束手机上的 App（清理后台）
+        self.kill_bundle = "com.gotokeep.keep"
+        self.kill_state = ""    # 自动结束的结果说明，给界面显示
+        self.kill_thread = None
 
     # -- 路线 / 参数 ------------------------------------------------------- #
     def rebuild(self):
@@ -79,9 +84,27 @@ class Runner:
         with self.lock:
             self.goal = max(0.0, float(meters or 0.0))
 
+    def set_auto_kill(self, on, bundle=None):
+        """跑够目标后是否自动结束手机上那个 App（清理后台让它暂停）。"""
+        with self.lock:
+            self.auto_kill = bool(on)
+            if bundle:
+                self.kill_bundle = str(bundle)
+
     # -- 生命周期 ----------------------------------------------------------- #
     def start(self):
         if self.running:
+            # 跑够目标距离后处于「冻结在终点」状态：再点开始 = 开新一轮
+            if self.holding:
+                self.holding = False
+                self.finished = False
+                self.dist = 0.0
+                self.sent = 0
+                self.lap = 0
+                self.idx = 0
+                self._log("开始新一轮（里程已归零，从起点重新跑）")
+                self._state()
+                return
             # 暂停中点「继续」：只解除暂停，别新开线程
             if self.paused:
                 self.paused = False
@@ -91,12 +114,14 @@ class Runner:
         # 上一轮是「跑够目标距离自动停」的话，这一次算新一轮，计数归零
         if self.finished:
             self.finished = False
+            self.holding = False
             self.dist = 0.0
             self.sent = 0
             self.lap = 0
             self._log("开始新一轮（里程已归零）")
         self.running = True
         self.paused = False
+        self.holding = False
         self.lost = 0
         self.thread = threading.Thread(target=self._run, daemon=True)
         self.thread.start()
@@ -117,6 +142,7 @@ class Runner:
     def stop(self):
         self.running = False
         self.paused = False
+        self.holding = False
 
     def close(self):
         self.stop()
@@ -144,6 +170,29 @@ class Runner:
             self.ps = M.PointStream(udid=None)
         self.ps.ensure()
 
+    def _start_kill(self, bundle):
+        """在后台线程里结束 App，别阻塞推点/保持定位。"""
+        if self.kill_thread and self.kill_thread.is_alive():
+            return
+
+        def work():
+            try:
+                import killapp
+                ok, msg = killapp.kill_bundle(bundle)
+                self.kill_state = msg
+                self._log(("✓ " if ok else "✗ ") + msg)
+                if ok:
+                    self._log("Keep 已被结束，它的记录停在跑够时的里程。"
+                              "回 Keep 点「继续」就能看到这条记录。")
+            except Exception as e:                     # noqa: BLE001
+                self.kill_state = "结束失败：%s" % e
+                self._log("结束 App 失败：%s" % e)
+                self._log("可以在手机上手动结束跑步，回来点「停止」恢复真实定位。")
+            self._state()
+
+        self.kill_thread = threading.Thread(target=work, daemon=True)
+        self.kill_thread.start()
+
     def _run(self):
         self._log("连接手机 ...")
         try:
@@ -168,6 +217,31 @@ class Runner:
         self._state()
 
         while self.running:
+            # 跑够目标距离后进入「保持」状态：不再沿路线走，而是低频重推终点坐标，
+            # 让 iPhone 的定位冻结在终点。这样 Keep 里看起来就是「你停下来了」，
+            # 里程不再增长，也不会因为服务关闭而瞬间跳回真实位置。
+            if self.holding:
+                hold = self.current
+                if hold:
+                    self._log("定位冻结在终点 %.6f,%.6f（去手机上点结束跑步，回来点「停止」）"
+                              % (hold[0], hold[1]))
+                while self.running and self.holding:
+                    try:
+                        self._ensure_ps()
+                        if hold:
+                            M.send_point(self.ps.sock, hold[0], hold[1])
+                        self.lost = 0
+                    except Exception as e:
+                        self.lost += 1
+                        if self.lost == 1 or self.lost % 20 == 0:
+                            self._log("保持定位失败 %d 次：%s" % (self.lost, e))
+                        if self.lost % 10 == 0:
+                            try:
+                                self.ps.hard_reset()
+                            except Exception:
+                                pass
+                    time.sleep(1.0)
+                continue
             with self.lock:
                 pts = list(self.loop_pts)
                 gen = self.gen
@@ -218,13 +292,23 @@ class Runner:
                 idx = (idx + 1) % n
                 steps += 1
                 self._state()
-                # 跑够目标距离就自动停（在推完这个点之后停，位置留在终点上）
+                # 跑够目标距离：不再沿路线走，改为在终点原地保持定位。
+                # 不关服务、不 break —— 一旦关掉服务，iPhone 会立刻恢复真实定位，
+                # 而 Keep 还在「运动中」，就会记下一条从终点瞬移回真实位置的轨迹。
                 if goal > 0 and self.dist >= goal:
-                    self.running = False
-                    self.paused = False
+                    self.holding = True
                     self.finished = True
-                    self._log("已跑够 %.2f km，自动停止（停在路线上当前位置）"
+                    self.paused = False
+                    self._log("已跑够 %.2f km —— 定位会停在终点不动。"
                               % (self.dist / 1000.0))
+                    with self.lock:
+                        do_kill = self.auto_kill
+                        bundle = self.kill_bundle
+                    if do_kill:
+                        self._log("正在结束手机上的 App（清理后台）...")
+                        self._start_kill(bundle)
+                    else:
+                        self._log("现在去手机上把 Keep 结束掉，回来点「停止」恢复真实定位。")
                     self._state()
                     break
                 t_next += interval
@@ -261,4 +345,7 @@ class Runner:
                 "lost": self.lost,
                 "goal": self.goal,
                 "finished": self.finished,
+                "holding": self.holding,
+                "autoKill": self.auto_kill,
+                "killState": self.kill_state,
             }
