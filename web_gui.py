@@ -47,6 +47,9 @@ BUILTIN_ROUTES = [
 
 LAST_CFG = os.path.join(HERE, "last_route.json")
 
+# 手机当前位置离路线起点超过这个距离（米）就拦一下，防止把跨城瞬移记成跑步里程
+JUMP_WARN_M = 50000.0
+
 
 def _route_path(name):
     return os.path.join(ROUTES_DIR, os.path.basename(name))
@@ -67,7 +70,7 @@ def _route_label(name):
         return fixed
     try:
         raw, crs = M._load_route_raw(_route_path(name))
-        wgs = M._apply_crs(raw, crs)
+        wgs = M._apply_crs(raw, crs, quiet=True)
         pts, total = M.build_loop(wgs, 2.8)
         stem = name.replace("route-", "").replace(".json", "")
         if total >= 1000:
@@ -500,6 +503,17 @@ class Handler(BaseHTTPRequestHandler):
                 if not ST.route_wgs:
                     self._json({"ok": False, "error": "还没有路线"}, 400)
                     return
+                # 防跨城瞬移：手机上次停在 A，路线起点在 B，一按开始就是一次
+                # A→B 的瞬移，跑步 App 会把它记成真实里程（曾出现过 1600 km 的记录）。
+                jump = ST.runner.jump_distance()
+                if jump is not None and jump > JUMP_WARN_M and not d.get("force"):
+                    self._json({
+                        "ok": False, "needConfirm": True, "jump": jump,
+                        "error": "手机现在的位置和这条路线的起点差了 %.0f 公里。"
+                                 "直接开始会是一次瞬移，Keep 会把这段距离记成跑步里程。"
+                                 % (jump / 1000.0),
+                    })
+                    return
                 ST.runner.start()
                 self._json({"ok": True})
                 return
@@ -520,6 +534,9 @@ class Handler(BaseHTTPRequestHandler):
                         ps = M.PointStream(udid=None)
                         ps.reset()
                         ps.close()
+                        # 手机已经回到真实位置，我们不知道它在哪了 —— 清掉记录，
+                        # 免得下次开始拿旧坐标算距离，误报「差了 1600 公里」。
+                        ST.runner.forget_last_point()
                         log("已发送『恢复真实定位』")
                     except Exception as e:
                         log("恢复失败：%s" % e)

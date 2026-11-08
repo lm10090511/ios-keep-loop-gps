@@ -1301,7 +1301,12 @@ $("cbAutoKill").addEventListener("change", async e => {
 });
 
 $("btnStart").onclick = async () => {
-  const r = await post("/api/start", {});
+  let r = await post("/api/start", {});
+  if (!r.ok && r.needConfirm){
+    const km = (r.jump / 1000).toFixed(0);
+    if (!confirm(r.error + "\n\n确定要这样开始吗？（Keep 里会多出这 " + km + " 公里）")) return;
+    r = await post("/api/start", { force: true });
+  }
   if (!r.ok) showTip("启动失败：" + (r.error || "未知"));
   else showTip("开始推点");
   refresh();

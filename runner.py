@@ -4,18 +4,26 @@
 把「按配速沿闭合路线循环推点」这件事独立出来，不依赖任何界面库。
 界面只需要提供两个回调：on_log(str) 和 on_state()。
 """
+import json
+import os
 import threading
 import time
 
 import ios_loop_gps as M
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+LAST_PT = os.path.join(HERE, "last_point.json")
+
 
 class Runner:
     """后台线程沿闭合路线循环推点。"""
 
-    def __init__(self, on_log=None, on_state=None):
+    def __init__(self, on_log=None, on_state=None, on_point=None):
         self.on_log = on_log or (lambda s: None)
         self.on_state = on_state or (lambda: None)
+        # 每推成功一个点回调一次 (lat, lon)。界面用它记住「手机最后停在哪」，
+        # 下次开始前就能判断这一次会不会是一次跨城瞬移。
+        self.on_point = on_point or (lambda lat, lon: None)
         self.lock = threading.Lock()
         self.route_wgs = []
         self.speed = 2.8
@@ -41,6 +49,8 @@ class Runner:
         self.kill_bundle = "com.gotokeep.keep"
         self.kill_state = ""    # 自动结束的结果说明，给界面显示
         self.kill_thread = None
+        self._last_pt = None        # 内存里最后一次推成功的位置
+        self._last_pt_save = 0.0
 
     # -- 路线 / 参数 ------------------------------------------------------- #
     def rebuild(self):
@@ -92,6 +102,64 @@ class Runner:
                 self.kill_bundle = str(bundle)
 
     # -- 生命周期 ----------------------------------------------------------- #
+    def load_last_point(self):
+        """读上次最后推到的位置（手机定位停在哪）。没有就返回 None。"""
+        if self._last_pt:
+            return self._last_pt
+        try:
+            with open(LAST_PT, "r", encoding="utf-8") as f:
+                o = json.load(f)
+            self._last_pt = (float(o["lat"]), float(o["lon"]))
+            return self._last_pt
+        except Exception:
+            return None
+
+    def _save_last_point(self, lat, lon):
+        # 内存里立刻更新，磁盘上最多 2 秒写一次 —— 5Hz 推点时没必要每个点都落盘
+        self._last_pt = (lat, lon)
+        now = time.monotonic()
+        if now - self._last_pt_save < 2.0:
+            return
+        self._last_pt_save = now
+        try:
+            with open(LAST_PT, "w", encoding="utf-8") as f:
+                json.dump({"lat": lat, "lon": lon}, f)
+        except Exception:
+            pass
+
+    def _flush_last_point(self):
+        if not self._last_pt:
+            return
+        try:
+            with open(LAST_PT, "w", encoding="utf-8") as f:
+                json.dump({"lat": self._last_pt[0], "lon": self._last_pt[1]}, f)
+        except Exception:
+            pass
+
+    def forget_last_point(self):
+        """忘掉「手机最后停在哪」。发过『恢复真实定位』之后必须调。"""
+        self._last_pt = None
+        try:
+            os.remove(LAST_PT)
+        except Exception:
+            pass
+
+    def jump_distance(self):
+        """路线起点 vs 手机当前位置的距离（米）。任一方未知返回 None。
+
+        这个数字用来防一个坑：如果手机现在停在 A 市、而路线在 B 市，
+        一按开始就是一次上千公里的瞬移，跑步 App 会把它记成真实里程。
+        """
+        last = self.load_last_point()
+        if not last:
+            return None
+        with self.lock:
+            pts = self.loop_pts
+            if not pts:
+                return None
+            lat0, lon0 = pts[0]
+        return M.haversine(last[0], last[1], lat0, lon0)
+
     def start(self):
         if self.running:
             # 跑够目标距离后处于「冻结在终点」状态：再点开始 = 开新一轮
@@ -286,6 +354,11 @@ class Runner:
                 self.sent += 1
                 if n > 1:
                     self.dist += self.total / n
+                self._save_last_point(lat, lon)
+                try:
+                    self.on_point(lat, lon)
+                except Exception:
+                    pass
                 with self.lock:
                     self.idx = (idx + 1) % n
                     goal = self.goal
@@ -326,6 +399,7 @@ class Runner:
                 self.ps.close()
             except Exception:
                 pass
+        self._flush_last_point()
 
     # -- 给界面读的快照 ----------------------------------------------------- #
     def snapshot(self):

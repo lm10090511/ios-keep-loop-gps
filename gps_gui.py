@@ -1086,6 +1086,17 @@ class App:
                 pass
             else:
                 self._check_ddi_now(mount=True)
+        # 防跨城瞬移：手机上次停在 A，路线起点在 B，一按开始就是一次瞬移，
+        # Keep 会把这段距离记成跑步里程（曾出现过 1600 km 的记录）。
+        jump = self.runner.jump_distance()
+        if jump is not None and jump > 50000.0:
+            if not messagebox.askyesno(
+                    "位置会瞬移 %.0f 公里" % (jump / 1000.0),
+                    "手机现在的定位和这条路线的起点差了 %.0f 公里。\n\n"
+                    "一按开始，定位会瞬间跳过去，Keep 会把这段距离记成跑步里程。\n\n"
+                    "建议先把路线挪到手机当前位置附近，或者先点「真实定位」再重来。\n\n"
+                    "确定要这样开始吗？" % (jump / 1000.0)):
+                return
         self.runner.err = None
         self.runner.start()
         if self.runner.holding:

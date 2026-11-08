@@ -628,12 +628,18 @@ def _load_route_raw(path):
     ], "WGS-84"
 
 
-def _apply_crs(pts, crs):
+def _apply_crs(pts, crs, quiet=False):
+    """按坐标系标记转换点位。
+
+    quiet=True 时不打日志 —— 界面刷新（/api/state 每次都会算路线周长）
+    会反复调用本函数，打日志会把终端刷爆。
+    """
     if crs in ("WGS-84", "WGS84", "WGS", "GPS"):
         return pts
     if crs in ("GCJ-02", "GCJ02", "GCJ", "AMAP", "高德"):
         from coord import gcj2wgs
-        log("路线坐标系是 GCJ-02，自动转成 WGS-84（否则会偏 400–600 米）")
+        if not quiet:
+            log("路线坐标系是 GCJ-02，自动转成 WGS-84（否则会偏 400–600 米）")
         return [gcj2wgs(la, lo) for la, lo in pts]
     raise ValueError("不认识的坐标系标记: %r（可用 WGS-84 / GCJ-02）" % (crs,))
 

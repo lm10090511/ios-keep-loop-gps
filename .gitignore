@@ -8,6 +8,7 @@ tilecache/
 gui.log
 *.log
 last_route.json
+last_point.json
 route-out-wgs.json
 
 # DDI 镜像（体积大、有版权，不随仓库分发）
