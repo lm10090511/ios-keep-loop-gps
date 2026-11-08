@@ -1,0 +1,1421 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>循环虚拟定位 · 控制台</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#0f1420; --panel:#161d2e; --panel2:#1d2740; --line:#2a3550;
+    --txt:#e6ecf7; --dim:#8b9ab8; --accent:#3ddc97; --accent2:#4aa8ff;
+    --warn:#ffb648; --bad:#ff6b6b;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--bg); color:var(--txt); overflow:hidden;
+    font:14px/1.5 "Microsoft YaHei UI","Microsoft YaHei",system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  #app{display:flex;height:100%}
+
+  /* ---------- 左侧控制栏 ---------- */
+  #side{
+    width:330px;flex:0 0 330px;background:var(--panel);border-right:1px solid var(--line);
+    display:flex;flex-direction:column;overflow-y:auto;
+  }
+  #side::-webkit-scrollbar{width:8px}
+  #side::-webkit-scrollbar-thumb{background:#2b3550;border-radius:4px}
+  .brand{
+    padding:16px 18px 12px;border-bottom:1px solid var(--line);
+  }
+  .brand h1{margin:0;font-size:17px;font-weight:700;letter-spacing:.5px}
+  .brand p{margin:4px 0 0;font-size:12px;color:var(--dim)}
+  .sec{padding:14px 18px;border-bottom:1px solid var(--line)}
+  .sec h2{
+    margin:0 0 10px;font-size:12px;font-weight:600;color:var(--dim);
+    letter-spacing:1.2px;text-transform:uppercase;
+  }
+
+  select,button,input[type=text]{
+    font-family:inherit;font-size:13px;color:var(--txt);
+    background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+    padding:8px 10px;outline:none;
+  }
+  select{width:100%}
+  select:focus,button:focus{border-color:var(--accent2)}
+  button{cursor:pointer;transition:.15s;user-select:none}
+  button:hover{background:#26334f}
+  button:active{transform:translateY(1px)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  .row{display:flex;gap:8px;margin-top:8px}
+  .row>*{flex:1}
+  .btn-sm{padding:7px 8px;font-size:12px;border-radius:7px}
+
+  .seg{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg button{flex:1;border:0;border-radius:0;background:transparent;padding:8px;font-size:13px;color:var(--dim)}
+  .seg button.on{background:var(--accent2);color:#06111f;font-weight:700}
+
+  /* 配速 */
+  .pace-big{font-size:30px;font-weight:800;letter-spacing:1px;line-height:1.1}
+  .pace-big small{font-size:13px;font-weight:500;color:var(--dim);letter-spacing:0}
+  .pace-sub{font-size:12px;color:var(--dim);margin-top:2px}
+  input[type=range]{
+    -webkit-appearance:none;width:100%;height:26px;background:transparent;margin:6px 0 0;
+  }
+  input[type=range]::-webkit-slider-runnable-track{
+    height:6px;border-radius:3px;
+    background:linear-gradient(90deg,#4aa8ff 0%,#3ddc97 45%,#ffb648 100%);
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:20px;height:20px;border-radius:50%;
+    background:#fff;border:3px solid var(--accent);margin-top:-7px;
+    box-shadow:0 2px 8px rgba(0,0,0,.5);cursor:grab;
+  }
+  .ticks{display:flex;justify-content:space-between;font-size:11px;color:#6d7c99;margin-top:-2px}
+
+  /* 主按钮 */
+  .run-row{display:flex;gap:8px;margin-top:10px}
+  .run-row button{flex:1;padding:11px 0;font-size:14px;font-weight:700;border-radius:9px}
+  #btnStart{background:var(--accent);color:#04160e;border-color:var(--accent)}
+  #btnStart:hover{background:#4fe9a6}
+  #btnPause{background:var(--warn);color:#1d1200;border-color:var(--warn)}
+  #btnPause:hover{background:#ffc463}
+  #btnStop{background:#2a3550;color:#ff8f8f;border-color:#3a4665}
+  #btnStop:hover{background:#33415f}
+
+  /* 状态 */
+  .kv{display:flex;justify-content:space-between;gap:10px;padding:3px 0;font-size:13px}
+  .kv span:first-child{color:var(--dim)}
+  .kv span:last-child{font-variant-numeric:tabular-nums;font-weight:600}
+  .pill{
+    display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;
+  }
+  .pill.ok{background:rgba(61,220,151,.15);color:var(--accent)}
+  .pill.no{background:rgba(255,107,107,.15);color:var(--bad)}
+  .pill.wait{background:rgba(255,182,72,.15);color:var(--warn)}
+  .big-num{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  /* 日志 */
+  #log{
+    flex:1;min-height:120px;overflow-y:auto;padding:10px 18px 16px;
+    font:11.5px/1.55 Consolas,"Cascadia Mono",monospace;color:#93a4c4;
+  }
+  #log div{padding:1px 0;word-break:break-all}
+  #log .t{color:#5b6b8a;margin-right:6px}
+
+  /* ---------- 预设形状 ---------- */
+  .shapes{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
+  .shapes button{
+    padding:9px 4px;font-size:12.5px;border-radius:7px;line-height:1.25;
+    background:#182236;color:#c3d2ea;border:1px solid #26314a;
+  }
+  .shapes button:hover{background:#1f2b43;border-color:#37456a}
+  .shapes button.on{background:var(--accent2);color:#06111f;border-color:var(--accent2);font-weight:700}
+  .shapes button i{display:block;font-style:normal;font-size:10.5px;opacity:.62;margin-top:1px}
+
+  /* ---------- 免费声明 ---------- */
+  #free{
+    flex:0 0 auto;margin:10px 14px 0;padding:9px 11px;border-radius:7px;
+    background:#12241c;border:1px solid #1f4a37;color:#8fd9b3;
+    font:11.5px/1.6 "Segoe UI",system-ui,sans-serif;
+  }
+  #free b{color:#5ee9a0;display:block;margin-bottom:2px}
+
+  /* ---------- 右侧地图 ---------- */
+  #main{flex:1;position:relative;overflow:hidden;background:#0b1018}
+  #map{display:block;width:100%;height:100%;cursor:grab}
+  #map.moving{cursor:move}
+  #map.editing{cursor:crosshair}
+
+  #hud{
+    position:absolute;left:14px;top:14px;display:flex;gap:8px;align-items:center;
+    background:rgba(15,20,32,.82);backdrop-filter:blur(8px);
+    border:1px solid var(--line);border-radius:10px;padding:7px 10px;font-size:12px;
+  }
+  #hud b{color:var(--accent)}
+  #zoombox{
+    position:absolute;right:14px;top:14px;display:flex;flex-direction:column;gap:6px;
+  }
+  #zoombox button{
+    width:38px;height:38px;font-size:18px;font-weight:700;padding:0;border-radius:10px;
+    background:rgba(22,29,46,.9);backdrop-filter:blur(8px);
+  }
+  #modebar{
+    position:absolute;left:50%;transform:translateX(-50%);bottom:18px;
+    display:flex;gap:6px;background:rgba(15,20,32,.86);backdrop-filter:blur(10px);
+    border:1px solid var(--line);border-radius:12px;padding:6px;
+  }
+  #modebar button{
+    border:0;background:transparent;color:var(--dim);padding:8px 12px;border-radius:8px;font-size:13px;
+    white-space:nowrap;
+  }
+  #modebar button.on{background:var(--accent2);color:#06111f;font-weight:700}
+  #tip{
+    position:absolute;left:50%;transform:translateX(-50%);top:16px;
+    background:rgba(61,220,151,.14);border:1px solid rgba(61,220,151,.4);color:#b7ffdc;
+    padding:8px 16px;border-radius:10px;font-size:13px;display:none;white-space:nowrap;
+  }
+  .spinner{
+    width:13px;height:13px;border:2px solid #3a4665;border-top-color:var(--accent2);
+    border-radius:50%;animation:spin .8s linear infinite;display:inline-block;vertical-align:-2px;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ================= 左栏 ================= -->
+  <aside id="side">
+    <div class="brand">
+      <h1>循环虚拟定位</h1>
+      <p>iPhone · usbmux 直连 · 沿路线循环推点</p>
+    </div>
+
+    <div id="free">
+      <b>本项目为 GitHub 开源项目，完全免费</b>
+      没有付费版、没有激活码、没有任何收费项目。
+      如果有人向你收钱，那是第三方行为，与本项目无关 —— 请直接到 GitHub 仓库下载。
+    </div>
+
+    <!-- 搜索位置 -->
+    <div class="sec">
+      <h2>搜索位置</h2>
+      <div class="row" style="gap:6px">
+        <input id="qPlace" type="text" placeholder="输入地名，回车搜索"
+               style="flex:1;min-width:0;background:#0f1626;color:#e6eefc;border:1px solid #26314a;
+                      border-radius:7px;padding:8px 10px;font:13px/1.3 inherit;outline:none">
+        <button class="btn-sm" id="btnSearch" style="flex:0 0 auto">搜索</button>
+      </div>
+      <div id="searchBox" style="display:none;margin-top:7px;max-height:190px;overflow:auto"></div>
+    </div>
+
+    <!-- 预设形状 -->
+    <div class="sec">
+      <h2>预设形状</h2>
+      <div class="shapes" id="shapeList"></div>
+      <div class="kv" style="margin-top:6px;gap:6px">
+        <span style="white-space:nowrap">周长</span>
+        <input id="inDist" type="number" min="100" max="20000" step="50" value="400"
+               style="flex:1;min-width:0;background:#0f1626;color:#e6eefc;border:1px solid #26314a;
+                      border-radius:6px;padding:5px 8px;font:12.5px/1.3 inherit;outline:none;text-align:right">
+        <span style="color:#6d7c99;font-size:11.5px">m</span>
+      </div>
+      <div class="row" style="gap:4px;margin-top:5px">
+        <button class="btn-sm" data-dist="400" style="flex:1;padding:5px 0">400 m</button>
+        <button class="btn-sm" data-dist="1000" style="flex:1;padding:5px 0">1 km</button>
+        <button class="btn-sm" data-dist="3000" style="flex:1;padding:5px 0">3 km</button>
+        <button class="btn-sm" data-dist="5000" style="flex:1;padding:5px 0">5 km</button>
+      </div>
+      <div class="kv" style="margin-top:4px">
+        <span id="rowRatio" style="display:none;color:#6d7c99;font-size:11.5px">
+          长宽比 <b id="vRatio" style="color:#c3d2ea">1.8</b>
+        </span>
+      </div>
+      <div style="color:#6d7c99;font-size:11.5px;line-height:1.5;margin-top:3px" id="vShapeDesc">标准田径场</div>
+      <button class="btn-sm" id="btnShape" style="width:100%;margin-top:8px">
+        ＋ 按此距离放到地图中心
+      </button>
+    </div>
+
+    <!-- 路线 -->
+    <div class="sec">
+      <h2>路线</h2>
+      <select id="selRoute"></select>
+      <div class="row">
+        <button class="btn-sm" id="btnReload">重新加载</button>
+        <button class="btn-sm" id="btnSave">保存当前</button>
+        <button class="btn-sm" id="btnDel">删除</button>
+      </div>
+      <div class="kv" style="margin-top:10px"><span>当前</span><span id="vRouteName">—</span></div>
+      <div class="kv"><span>周长</span><span id="vTotal">—</span></div>
+      <div class="kv"><span>点数</span><span id="vPts">—</span></div>
+    </div>
+
+    <!-- 地图样式 -->
+    <div class="sec">
+      <h2>底图</h2>
+      <div class="seg" id="segStyle">
+        <button data-style="8" class="on">路网</button>
+        <button data-style="6">卫星</button>
+      </div>
+    </div>
+
+    <!-- 配速 -->
+    <div class="sec">
+      <h2>配速</h2>
+      <div class="pace-big"><span id="vPace">5'57"</span><small> /km</small></div>
+      <div class="pace-sub">速度 <span id="vSpeed">2.80</span> m/s · 频率 <span id="vHz">1</span> Hz</div>
+      <input type="range" id="rngPace" min="180" max="900" step="5" value="357">
+      <div class="ticks"><span>3'00"</span><span>6'00"</span><span>9'00"</span><span>15'00"</span></div>
+      <div class="row">
+        <button class="btn-sm" data-pace="357">5'57"</button>
+        <button class="btn-sm" data-pace="300">5'00"</button>
+        <button class="btn-sm" data-pace="240">4'00"</button>
+        <button class="btn-sm" data-pace="180">3'00"</button>
+      </div>
+      <div class="row">
+        <select id="selHz" style="flex:1">
+          <option value="1">1 Hz</option>
+          <option value="2">2 Hz</option>
+          <option value="5">5 Hz</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 目标距离 -->
+    <div class="sec">
+      <h2>目标距离</h2>
+      <div class="kv" style="gap:6px">
+        <span style="white-space:nowrap">跑够</span>
+        <input id="inGoal" type="number" min="0" max="200" step="0.5" value="0"
+               placeholder="0"
+               style="flex:1;min-width:0;background:#0f1626;color:#e6eefc;border:1px solid #26314a;
+                      border-radius:6px;padding:5px 8px;font:12.5px/1.3 inherit;outline:none;text-align:right">
+        <span style="color:#6d7c99;font-size:11.5px">km 自动停</span>
+      </div>
+      <div class="row" style="gap:4px;margin-top:5px">
+        <button class="btn-sm" data-goal="1" style="flex:1;padding:5px 0">1</button>
+        <button class="btn-sm" data-goal="3" style="flex:1;padding:5px 0">3</button>
+        <button class="btn-sm" data-goal="5" style="flex:1;padding:5px 0">5</button>
+        <button class="btn-sm" data-goal="10" style="flex:1;padding:5px 0">10</button>
+        <button class="btn-sm" data-goal="0" style="flex:1;padding:5px 0">不限</button>
+      </div>
+      <div class="kv" style="margin-top:5px">
+        <span>进度</span><span id="vGoalPct" style="color:#8fd9b3">—</span>
+      </div>
+      <div style="color:#6d7c99;font-size:11.5px;line-height:1.5;margin-top:3px">
+        填 0 = 一直循环不停
+      </div>
+    </div>
+
+    <!-- 控制 -->
+    <div class="sec">
+      <h2>控制</h2>
+      <div class="run-row">
+        <button id="btnStart">▶ 开始</button>
+        <button id="btnPause">⏸ 暂停</button>
+      </div>
+      <div class="run-row">
+        <button id="btnStop" style="flex:1">⏹ 停止</button>
+        <button id="btnReset" style="flex:1;background:#2a3550;color:#9fd4ff">⟲ 真实定位</button>
+      </div>
+    </div>
+
+    <!-- 状态 -->
+    <div class="sec">
+      <h2>状态</h2>
+      <div class="kv"><span>DDI</span><span id="vDdi"><span class="pill wait">检查中</span></span></div>
+      <div class="kv"><span>设备</span><span id="vDev">—</span></div>
+      <div class="kv"><span>已跑</span><span class="big-num" id="vDist">0.00 km</span></div>
+      <div class="kv"><span>圈数</span><span id="vLap">0</span></div>
+      <div class="kv"><span>已发点</span><span id="vSent">0</span></div>
+      <div class="kv"><span>当前坐标</span><span id="vCur" style="font-size:12px">—</span></div>
+      <div class="run-row" style="margin-top:10px">
+        <button id="btnDdi" class="btn-sm" style="flex:1">检查 DDI</button>
+        <button id="btnDdiMount" class="btn-sm" style="flex:1">挂载 DDI</button>
+      </div>
+    </div>
+
+    <div id="log"></div>
+  </aside>
+
+  <!-- ================= 地图 ================= -->
+  <main id="main">
+    <canvas id="map"></canvas>
+    <div id="hud">缩放 <b id="vZoom">18</b> · 中心 <b id="vCenter">—</b></div>
+    <div id="zoombox">
+      <button id="btnZin">+</button>
+      <button id="btnZout">−</button>
+      <button id="btnHome" title="回到路线">⌂</button>
+    </div>
+    <div id="modebar">
+      <button data-mode="view" class="on">浏览</button>
+      <button data-mode="move">✥ 拖动</button>
+      <button data-mode="rotate">⟳ 旋转</button>
+      <button data-mode="scale">⤢ 缩放</button>
+      <button data-mode="draw">✎ 画路线</button>
+    </div>
+    <div id="tip"></div>
+  </main>
+</div>
+
+<script>
+"use strict";
+/* ============================ 基础工具 ============================ */
+const $ = id => document.getElementById(id);
+/* 高德瓦片最高只到 z18；再往上用 z18 超采样放大（MAX_Z 是"视觉缩放"，不是瓦片层级） */
+const TILE = 256, MIN_Z = 3, MAX_Z = 21, MAX_TILE_Z = 18;
+const R = 6378137, ORIGIN = Math.PI * R;
+
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+function lonToX(lon, z){ return (lon + 180) / 360 * Math.pow(2, z); }
+function latToY(lat, z){
+  const s = Math.sin(clamp(lat, -85.05112878, 85.05112878) * Math.PI / 180);
+  return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * Math.pow(2, z);
+}
+function xToLon(x, z){ return x / Math.pow(2, z) * 360 - 180; }
+function yToLat(y, z){
+  const n = Math.PI - 2 * Math.PI * y / Math.pow(2, z);
+  return 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+}
+function fmtPace(sec){
+  sec = Math.round(sec);
+  return Math.floor(sec / 60) + "'" + String(sec % 60).padStart(2, "0") + '"';
+}
+function haversine(a, b){
+  const rad = Math.PI / 180;
+  const dLat = (b[0] - a[0]) * rad, dLon = (b[1] - a[1]) * rad;
+  const h = Math.sin(dLat/2)**2 + Math.cos(a[0]*rad)*Math.cos(b[0]*rad)*Math.sin(dLon/2)**2;
+  return 2 * 6371000 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+function polyLen(pts){
+  let s = 0;
+  for (let i = 1; i < pts.length; i++) s += haversine(pts[i-1], pts[i]);
+  return s;
+}
+
+/* ============================ 地图视图 ============================ */
+const canvas = $("map");
+const ctx = canvas.getContext("2d");
+const tiles = new Map();       // "z/x/y" -> {img, ok, err}
+const TILE_LIMIT = 900;
+
+const view = {
+  lat: 39.908722, lon: 116.397499, z: 16,
+  w: 0, h: 0, dpr: Math.min(window.devicePixelRatio || 1, 2),
+  mode: "view",
+  route: [],          // GCJ-02 显示坐标 [[lat,lon],...]
+  routeName: "",      // 当前路线名（拖动后保留，别退化成「自定义路线 N 点」）
+  marker: null,       // GCJ-02
+  track: [],
+};
+
+function resize(){
+  const r = canvas.parentElement.getBoundingClientRect();
+  view.w = Math.max(320, Math.floor(r.width));
+  view.h = Math.max(240, Math.floor(r.height));
+  canvas.width = Math.floor(view.w * view.dpr);
+  canvas.height = Math.floor(view.h * view.dpr);
+  canvas.style.width = view.w + "px";
+  canvas.style.height = view.h + "px";
+  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  draw();
+}
+
+/* 经纬 -> 屏幕 */
+function toScreen(lat, lon){
+  const cx = lonToX(view.lon, view.z), cy = latToY(view.lat, view.z);
+  const px = lonToX(lon, view.z), py = latToY(lat, view.z);
+  return [(px - cx) * TILE + view.w / 2, (py - cy) * TILE + view.h / 2];
+}
+/* 屏幕 -> 经纬 */
+function toLatLon(sx, sy){
+  const cx = lonToX(view.lon, view.z), cy = latToY(view.lat, view.z);
+  const px = (sx - view.w / 2) / TILE + cx;
+  const py = (sy - view.h / 2) / TILE + cy;
+  return [yToLat(py, view.z), xToLon(px, view.z)];
+}
+
+function tileFor(z, x, y){
+  const key = z + "/" + x + "/" + y;
+  let t = tiles.get(key);
+  if (t){
+    // 失败过的瓦片 15 秒后允许重试（高德偶发 404/超时，不是永久缺失）
+    if (!t.ok && t.err && Date.now() - t.errAt > 15000){
+      tiles.delete(key);
+    } else {
+      return t;
+    }
+  }
+  if (tiles.size > TILE_LIMIT){ tiles.clear(); }
+  t = { img: null, ok: false, err: false, errAt: 0 };
+  tiles.set(key, t);
+  const im = new Image();
+  im.onload = () => {
+    t.img = im;
+    t.ok = true;
+    t.blank = isBlankTile(im);     // 空白灰块（高德乡下 z18 常见）
+    draw();
+  };
+  im.onerror = () => { t.err = true; t.errAt = Date.now(); };
+  im.src = "/tile?style=" + state.style + "&z=" + z + "&x=" + x + "&y=" + y;
+  return t;
+}
+
+/* 判断是不是高德的"无数据空白块"（浅米色、几乎无起伏）——这种块不该盖住底图 */
+const _probe = document.createElement("canvas");
+_probe.width = _probe.height = 8;
+const _pctx = _probe.getContext("2d", { willReadFrequently: true });
+function isBlankTile(im){
+  try {
+    _pctx.clearRect(0, 0, 8, 8);
+    _pctx.drawImage(im, 0, 0, 8, 8);
+    const d = _pctx.getImageData(0, 0, 8, 8).data;
+    let min = 255, max = 0, sum = 0, cnt = 0;
+    for (let i = 0; i < d.length; i += 4){
+      const v = (d[i] + d[i+1] + d[i+2]) / 3;
+      if (v < min) min = v;
+      if (v > max) max = v;
+      sum += v; cnt++;
+    }
+    const mean = sum / cnt;
+    // 高德空块：很亮（浅米色 240±）且起伏小；有内容的瓦片有道路/水系，range 通常 >30
+    return (max - min) < 18 && mean > 225;
+  } catch (e){
+    return false;                    // 跨域污染时按"有内容"处理
+  }
+}
+
+/* 找一块能用的祖先瓦片（高德在乡下 z18 有空洞，404 的格子用 z17 放大顶上） */
+function ancestorTile(z, x, y){
+  for (let up = 1; up <= 4; up++){
+    const az = z - up;
+    if (az < MIN_Z) return null;
+    const ax = x >> up, ay = y >> up;
+    const t = tiles.get(az + "/" + ax + "/" + ay);
+    if (t && t.ok) return { img: t.img, up: up };
+    // 顺便触发祖先下载
+    tileFor(az, ax, ay);
+  }
+  return null;
+}
+
+function draw(){
+  ctx.clearRect(0, 0, view.w, view.h);
+  ctx.fillStyle = "#0b1018";
+  ctx.fillRect(0, 0, view.w, view.h);
+
+  /* --- 瓦片 --- */
+  /* 视觉层级可能高于瓦片层级（z>18 时用 z18 放大），统一按"瓦片层级"铺图 */
+  const tz = Math.min(view.z, MAX_TILE_Z);
+  const scl = Math.pow(2, view.z - tz);          // 1 / 2 / 4 / 8
+  const n = Math.pow(2, tz);
+  const cx = lonToX(view.lon, tz), cy = latToY(view.lat, tz);
+  const halfW = view.w / 2 / (TILE * scl), halfH = view.h / 2 / (TILE * scl);
+  const x0 = Math.floor(cx - halfW) - 1, x1 = Math.ceil(cx + halfW) + 1;
+  const y0 = Math.max(0, Math.floor(cy - halfH) - 1);
+  const y1 = Math.min(n - 1, Math.ceil(cy + halfH) + 1);
+
+  let missing = 0;
+  const ts = TILE * scl;                          // 一块瓦片在屏幕上的边长
+  for (let ty = y0; ty <= y1; ty++){
+    for (let tx = x0; tx <= x1; tx++){
+      const wx = ((tx % n) + n) % n;
+      const sx = Math.floor((tx - cx) * ts + view.w / 2);
+      const sy = Math.floor((ty - cy) * ts + view.h / 2);
+      const t = tileFor(tz, wx, ty);
+      if (t.ok && !t.blank){
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(t.img, sx, sy, ts + 1, ts + 1);
+        continue;
+      }
+      // 本格没图（404 / 还在下 / 是空白灰块），先用祖辈瓦片放大顶着
+      const a = ancestorTile(tz, wx, ty);
+      if (a){
+        const f = Math.pow(2, a.up);           // 祖辈一块 = 本格 f×f
+        const ox = (wx % f) / f * TILE;        // 祖辈内的像素偏移
+        const oy = (ty % f) / f * TILE;
+        // 不做任何压暗/描边：放大后的祖辈图与周边同色，看不出接缝
+        ctx.drawImage(a.img, ox, oy, TILE / f, TILE / f,
+                      sx, sy, ts + 1, ts + 1);
+      } else if (t.ok && t.blank){
+        ctx.drawImage(t.img, sx, sy, ts + 1, ts + 1);   // 祖辈也没有，退回灰块
+      } else {
+        missing++;
+        ctx.fillStyle = "#121a28";
+        ctx.fillRect(sx, sy, ts + 1, ts + 1);
+      }
+    }
+  }
+
+  /* --- 轨迹（已走过的） --- */
+  if (view.track.length > 1){
+    ctx.beginPath();
+    view.track.forEach((p, i) => {
+      const [x, y] = toScreen(p[0], p[1]);
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    });
+    ctx.strokeStyle = "rgba(74,168,255,.55)";
+    ctx.lineWidth = 3;
+    ctx.lineJoin = "round";
+    ctx.stroke();
+  }
+
+  /* --- 路线 --- */
+  if (view.route.length > 1){
+    const path = new Path2D();
+    view.route.forEach((p, i) => {
+      const [x, y] = toScreen(p[0], p[1]);
+      i ? path.lineTo(x, y) : path.moveTo(x, y);
+    });
+    path.closePath();
+
+    ctx.save();
+    ctx.shadowColor = "rgba(61,220,151,.85)";
+    ctx.shadowBlur = 12;
+    ctx.strokeStyle = "rgba(61,220,151,.95)";
+    ctx.lineWidth = 4;
+    ctx.lineJoin = "round";
+    ctx.stroke(path);
+    ctx.restore();
+
+    // 起点
+    const [sx, sy] = toScreen(view.route[0][0], view.route[0][1]);
+    ctx.beginPath();
+    ctx.arc(sx, sy, 6, 0, 7);
+    ctx.fillStyle = "#3ddc97";
+    ctx.fill();
+    ctx.strokeStyle = "#04160e";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  /* --- 拖动 / 旋转 / 缩放时的把手（四角 + 中心） --- */
+  if ((view.mode === "move" || view.mode === "rotate" || view.mode === "scale")
+      && view.route.length > 1){
+    const lats = view.route.map(p => p[0]), lons = view.route.map(p => p[1]);
+    const la0 = Math.min(...lats), la1 = Math.max(...lats);
+    const lo0 = Math.min(...lons), lo1 = Math.max(...lons);
+    const corners = [[la0, lo0], [la0, lo1], [la1, lo0], [la1, lo1],
+                     [(la0 + la1) / 2, (lo0 + lo1) / 2]];
+    corners.forEach((c, i) => {
+      const [x, y] = toScreen(c[0], c[1]);
+      const r = i === 4 ? 9 : 6;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, 7);
+      ctx.fillStyle = i === 4 ? "rgba(61,220,151,.30)" : "rgba(61,220,151,.22)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(61,220,151,.95)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    });
+    // 旋转模式额外画一条中心到角的参考虚线
+    if (view.mode === "rotate"){
+      const [cx0, cy0] = toScreen((la0 + la1) / 2, (lo0 + lo1) / 2);
+      const [cx1, cy1] = toScreen(la1, lo1);
+      ctx.save();
+      ctx.setLineDash([5, 5]);
+      ctx.strokeStyle = "rgba(61,220,151,.55)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(cx0, cy0); ctx.lineTo(cx1, cy1); ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  /* --- 手画路线的临时点 --- */
+  if (view.mode === "draw" && drawPts.length){
+    const p2 = new Path2D();
+    drawPts.forEach((p, i) => {
+      const [x, y] = toScreen(p[0], p[1]);
+      i ? p2.lineTo(x, y) : p2.moveTo(x, y);
+    });
+    ctx.save();
+    ctx.setLineDash([6, 5]);
+    ctx.strokeStyle = "rgba(255,196,84,.95)";
+    ctx.lineWidth = 2.5;
+    ctx.stroke(p2);
+    ctx.restore();
+    drawPts.forEach(p => {
+      const [x, y] = toScreen(p[0], p[1]);
+      ctx.beginPath();
+      ctx.arc(x, y, 5, 0, 7);
+      ctx.fillStyle = "#ffc454";
+      ctx.fill();
+      ctx.strokeStyle = "#2a1c00";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    });
+  }
+
+  /* --- 当前位置 --- */
+  if (view.marker){
+    const [mx, my] = toScreen(view.marker[0], view.marker[1]);
+    const pulse = (Date.now() % 1400) / 1400;
+    ctx.beginPath();
+    ctx.arc(mx, my, 8 + pulse * 16, 0, 7);
+    ctx.fillStyle = "rgba(74,168,255," + (0.30 * (1 - pulse)).toFixed(3) + ")";
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(mx, my, 7, 0, 7);
+    ctx.fillStyle = "#4aa8ff";
+    ctx.fill();
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+  }
+
+  /* --- 比例尺 --- */
+  const mPerPx = 156543.03392 * Math.cos(view.lat * Math.PI / 180) / Math.pow(2, view.z);  let barM = 100, barPx = barM / mPerPx;
+  [5000, 2000, 1000, 500, 200, 100, 50, 20, 10].some(v => {
+    if (v / mPerPx <= 140){ barM = v; barPx = v / mPerPx; return true; }
+    return false;
+  });
+  const bx = 18, by = view.h - 26;
+  ctx.fillStyle = "rgba(15,20,32,.75)";
+  ctx.fillRect(bx - 6, by - 16, barPx + 12, 26);
+  ctx.strokeStyle = "#e6ecf7";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(bx, by); ctx.lineTo(bx + barPx, by);
+  ctx.moveTo(bx, by - 5); ctx.lineTo(bx, by + 5);
+  ctx.moveTo(bx + barPx, by - 5); ctx.lineTo(bx + barPx, by + 5);
+  ctx.stroke();
+  ctx.fillStyle = "#e6ecf7";
+  ctx.font = "12px 'Microsoft YaHei UI',sans-serif";
+  ctx.fillText(barM >= 1000 ? (barM / 1000) + " km" : barM + " m", bx, by - 9);
+
+  $("vZoom").textContent = view.z;
+  $("vCenter").textContent = view.lat.toFixed(5) + ", " + view.lon.toFixed(5);
+
+  if (missing > 4){
+    ctx.fillStyle = "rgba(139,154,184,.65)";
+    ctx.font = "13px 'Microsoft YaHei UI',sans-serif";
+    ctx.fillText("底图下载中…（" + missing + " 块）", view.w / 2 - 60, 60);
+  }
+}
+
+/* ============================ 交互：缩放/平移 ============================ */
+function zoomAt(sx, sy, dz){
+  const [lat0, lon0] = toLatLon(sx, sy);
+  const z2 = clamp(view.z + dz, MIN_Z, MAX_Z);
+  if (z2 === view.z) return;
+  view.z = z2;
+  const [lat1, lon1] = toLatLon(sx, sy);
+  view.lat = clamp(view.lat + (lat0 - lat1), -85, 85);
+  view.lon += (lon0 - lon1);
+  draw();
+}
+
+canvas.addEventListener("wheel", e => {
+  e.preventDefault();
+  zoomAt(e.offsetX, e.offsetY, e.deltaY < 0 ? 1 : -1);
+}, { passive: false });
+
+let dragging = false, dragStart = null, dragMoved = false;
+/* 旋转 / 缩放：进入模式时把当前路线存成基准，拖动时按角度/比例重算 */
+let editBase = null, editCenter = null, editAngle = 0, editScale = 1;
+let drawPts = [];
+
+function routeCenter(pts){
+  const lats = pts.map(p => p[0]), lons = pts.map(p => p[1]);
+  return [(Math.min(...lats) + Math.max(...lats)) / 2,
+          (Math.min(...lons) + Math.max(...lons)) / 2];
+}
+
+function beginEdit(){
+  editBase = view.route.map(p => p.slice());
+  editCenter = routeCenter(editBase);
+  editAngle = 0;
+  editScale = 1;
+}
+
+function applyEdit(){
+  if (!editBase) return;
+  const [cl, cn] = editCenter;
+  const ky = 111320.0;
+  const kx = ky * Math.cos(cl * Math.PI / 180);
+  const ca = Math.cos(editAngle), sa = Math.sin(editAngle);
+  view.route = editBase.map(p => {
+    const dx = (p[1] - cn) * kx, dy = (p[0] - cl) * ky;
+    const rx = dx * ca - dy * sa;
+    const ry = dx * sa + dy * ca;
+    return [cl + ry * editScale / ky, cn + rx * editScale / kx];
+  });
+  draw();
+}
+
+canvas.addEventListener("mousedown", e => {
+  dragging = true; dragMoved = false;
+  dragStart = { x: e.offsetX, y: e.offsetY, lat: view.lat, lon: view.lon,
+                pts: view.mode === "move" ? view.route.map(p => p.slice()) : null };
+  if (view.mode === "rotate" || view.mode === "scale"){
+    if (!editBase) beginEdit();
+    const [cl, cn] = editCenter;
+    const [mlat, mlon] = toLatLon(e.offsetX, e.offsetY);
+    const ky = 111320.0, kx = ky * Math.cos(cl * Math.PI / 180);
+    dragStart.a0 = Math.atan2((mlat - cl) * ky, (mlon - cn) * kx);
+    dragStart.d0 = Math.max(1.0, Math.hypot((mlon - cn) * kx, (mlat - cl) * ky));  // 米
+  }
+  canvas.style.cursor = view.mode === "view" ? "grabbing" : "crosshair";
+});
+
+canvas.addEventListener("mousemove", e => {
+  if (!dragging) return;
+  const dx = e.offsetX - dragStart.x, dy = e.offsetY - dragStart.y;
+  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragMoved = true;
+
+  if (view.mode === "move" && dragStart.pts){
+    // 以经纬度平移整条路线
+    const [la0, lo0] = toLatLon(dragStart.x, dragStart.y);
+    const [la1, lo1] = toLatLon(e.offsetX, e.offsetY);
+    const dLat = la1 - la0, dLon = lo1 - lo0;
+    view.route = dragStart.pts.map(p => [p[0] + dLat, p[1] + dLon]);
+    draw();
+    return;
+  }
+  if (view.mode === "rotate" && editBase){
+    const [cl, cn] = editCenter;
+    const [mlat, mlon] = toLatLon(e.offsetX, e.offsetY);
+    const ky = 111320.0, kx = ky * Math.cos(cl * Math.PI / 180);
+    const a1 = Math.atan2((mlat - cl) * ky, (mlon - cn) * kx);
+    editAngle = a1 - dragStart.a0;
+    applyEdit();
+    $("tip").textContent = "旋转 " + (editAngle * 180 / Math.PI).toFixed(1) + "°";
+    $("tip").style.display = "block";
+    return;
+  }
+  if (view.mode === "scale" && editBase){
+    const [cl, cn] = editCenter;
+    const [mlat, mlon] = toLatLon(e.offsetX, e.offsetY);
+    const ky = 111320.0, kx = ky * Math.cos(cl * Math.PI / 180);
+    const d1 = Math.hypot((mlon - cn) * kx, (mlat - cl) * ky);   // 米
+    editScale = clamp(d1 / dragStart.d0, 0.15, 8);
+    applyEdit();
+    $("tip").textContent = "缩放 " + editScale.toFixed(2) + "×";
+    $("tip").style.display = "block";
+    return;
+  }
+  // 平移地图
+  const cx = lonToX(view.lon, view.z), cy = latToY(view.lat, view.z);
+  const px = cx - dx / TILE, py = cy - dy / TILE;
+  view.lon = xToLon(px, view.z);
+  view.lat = yToLat(py, view.z);
+  dragStart.x = e.offsetX; dragStart.y = e.offsetY;
+  draw();
+});
+
+canvas.addEventListener("mouseup", e => {
+  const wasDrag = dragMoved;
+  dragging = false;
+  canvas.style.cursor = view.mode === "view" ? "grab" : "crosshair";
+
+  if (view.mode === "move" && wasDrag){
+    saveMovedRoute();
+  } else if ((view.mode === "rotate" || view.mode === "scale") && wasDrag){
+    saveMovedRoute();
+    editBase = null;                 // 下次拖动重新取基准，避免累积误差
+    beginEdit();
+  } else if (view.mode === "draw" && !wasDrag){
+    const [lat, lon] = toLatLon(e.offsetX, e.offsetY);
+    drawPts.push([lat, lon]);
+    draw();
+    showTip("已加第 " + drawPts.length + " 个点（双击结束，右键撤销）");
+  }
+});
+
+canvas.addEventListener("dblclick", e => {
+  if (view.mode !== "draw") return;
+  e.preventDefault();
+  if (drawPts.length >= 3){
+    const pts = drawPts.slice();
+    drawPts = [];
+    post("/api/route", { points: pts, name: "手画路线" }).then(r => {
+      if (r.ok){
+        view.routeName = r.name || "手画路线";
+        showTip("手画路线：" + pts.length + " 点，" + (r.total / 1000).toFixed(2) + " km");
+        refresh(true);
+        fitRoute();
+        setMode("view");
+      } else showTip("生成失败：" + (r.error || "未知"));
+    });
+  } else {
+    showTip("至少要 3 个点");
+  }
+});
+
+canvas.addEventListener("contextmenu", e => {
+  if (view.mode !== "draw") return;
+  e.preventDefault();
+  if (drawPts.length){ drawPts.pop(); draw(); showTip("已撤销一个点，剩 " + drawPts.length + " 个"); }
+});
+
+canvas.addEventListener("mouseleave", () => { dragging = false; });
+
+$("btnZin").onclick = () => zoomAt(view.w / 2, view.h / 2, 1);
+$("btnZout").onclick = () => zoomAt(view.w / 2, view.h / 2, -1);
+$("btnHome").onclick = () => fitRoute();
+
+function fitRoute(){
+  if (!view.route.length) return;
+  const lats = view.route.map(p => p[0]), lons = view.route.map(p => p[1]);
+  view.lat = (Math.min(...lats) + Math.max(...lats)) / 2;
+  view.lon = (Math.min(...lons) + Math.max(...lons)) / 2;
+  const spanLat = Math.max(...lats) - Math.min(...lats);
+  const spanLon = Math.max(...lons) - Math.min(...lons);
+  let z = MAX_Z;
+  while (z > MIN_Z){
+    // 南边（lat - span/2）的 y 比北边大，相减才是正的像素高度
+    const pxH = (latToY(view.lat - spanLat/2, z) - latToY(view.lat + spanLat/2, z)) * TILE;
+    const pxW = (lonToX(view.lon + spanLon/2, z) - lonToX(view.lon - spanLon/2, z)) * TILE;
+    if (pxH < view.h * 0.72 && pxW < view.w * 0.72) break;
+    z--;
+  }
+  view.z = z;
+  draw();
+}
+
+/* ============================ 搜索位置 ============================ */
+function renderHits(hits, kw){
+  const box = $("searchBox");
+  box.innerHTML = "";
+  if (!hits.length){
+    box.style.display = "block";
+    box.innerHTML = '<div style="color:#6d7c99;font-size:12px;padding:4px 2px">没搜到「'
+      + esc(kw) + '」，换个说法试试</div>';
+    return;
+  }
+  hits.forEach(h => {
+    const d = document.createElement("div");
+    d.style.cssText = "padding:7px 9px;border-radius:6px;cursor:pointer;margin-bottom:3px;"
+      + "background:#131c2e;border:1px solid #1e2940";
+    d.onmouseenter = () => d.style.background = "#1b2740";
+    d.onmouseleave = () => d.style.background = "#131c2e";
+    d.innerHTML = '<div style="color:#dbe6f7;font-size:12.5px">' + esc(h.name) + '</div>'
+      + '<div style="color:#6d7c99;font-size:11px;margin-top:2px">'
+      + esc(h.addr || h.tag || "") + '</div>';
+    d.onclick = () => {
+      view.lat = h.lat;
+      view.lon = h.lon;
+      if (view.z < 17) view.z = 17;
+      draw();
+      box.style.display = "none";
+      showTip("已跳到：" + h.name + "（" + h.lat.toFixed(5) + ", " + h.lon.toFixed(5) + "）");
+    };
+    box.appendChild(d);
+  });
+  box.style.display = "block";
+}
+
+function esc(s){
+  return String(s == null ? "" : s).replace(/[&<>"]/g, c =>
+    ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+}
+
+let searching = false;
+async function doSearch(){
+  const kw = ($("qPlace").value || "").trim();
+  if (!kw || searching) return;
+  searching = true;
+  const btn = $("btnSearch");
+  const old = btn.textContent;
+  btn.textContent = "…";
+  try {
+    const r = await post("/api/search", {q: kw, limit: 8});
+    if (!r.ok){
+      showTip(r.error || "搜索失败");
+      $("searchBox").style.display = "none";
+    } else {
+      renderHits(r.results || [], kw);
+    }
+  } catch (e) {
+    showTip("搜索失败：" + e);
+  } finally {
+    btn.textContent = old;
+    searching = false;
+  }
+}
+
+$("btnSearch").onclick = doSearch;
+$("qPlace").onkeydown = (e) => { if (e.key === "Enter") doSearch(); };
+
+/* ============================ 预设形状 / 拖动路线 ============================ */
+let curShape = "track";
+let shapeSize = 400;
+
+function setMode(m){
+  view.mode = m;
+  document.querySelectorAll("#modebar button").forEach(b => {
+    b.classList.toggle("on", b.dataset.mode === m);
+  });
+  canvas.className = m === "view" ? "" : "editing";
+  if (m === "move") showTip("按住地图任意位置，把整条路线拖过去");
+  else if (m === "rotate"){ beginEdit(); showTip("按住地图绕中心拖动 = 旋转，松手生效"); }
+  else if (m === "scale"){ beginEdit(); showTip("按住地图往外拖 = 放大，往里拖 = 缩小，松手生效"); }
+  else if (m === "draw"){ drawPts = []; showTip("在地图上点几个点连成环，双击结束，右键撤销"); }
+  else hideTip();
+  draw();
+}
+
+document.querySelectorAll("#modebar button").forEach(b => {
+  b.onclick = () => setMode(b.dataset.mode);
+});
+
+/* 形状按钮 */
+function pickShape(s){
+  curShape = s.id;
+  shapeSize = s.size;
+  $("inDist").min = s.min;
+  $("inDist").max = s.max;
+  $("inDist").value = s.size;
+  $("vShapeDesc").textContent = s.desc;
+  const useRatio = s.ratio > 0;
+  $("rowRatio").style.display = useRatio ? "" : "none";
+  if (useRatio){
+    $("vRatio").textContent = s.ratio.toFixed(1);
+  }
+  document.querySelectorAll("#shapeList button").forEach(x =>
+    x.classList.toggle("on", x.dataset.shape === s.id));
+  draw();
+}
+
+/* 距离输入框 */
+$("inDist").oninput = () => {
+  const v = parseFloat($("inDist").value);
+  if (isFinite(v) && v > 0) shapeSize = v;
+};
+
+document.querySelectorAll("button[data-dist]").forEach(b => {
+  b.onclick = () => {
+    $("inDist").value = b.dataset.dist;
+    shapeSize = parseFloat(b.dataset.dist);
+    document.querySelectorAll("button[data-dist]").forEach(x =>
+      x.classList.toggle("on", x === b));
+  };
+});
+
+function renderShapes(shapes){
+  const box = $("shapeList");
+  if (box.dataset.n === String(shapes.length) && box.children.length) return;
+  box.dataset.n = String(shapes.length);
+  box.innerHTML = "";
+  shapes.forEach(s => {
+    const b = document.createElement("button");
+    b.dataset.shape = s.id;
+    b.innerHTML = s.name + "<i>" + s.desc + "</i>";
+    b.title = s.desc;
+    b.onclick = () => pickShape(s);
+    box.appendChild(b);
+  });
+  if (!box.dataset.inited){
+    box.dataset.inited = "1";
+    pickShape(shapes.find(s => s.id === curShape) || shapes[0]);
+  }
+}
+
+/* 把当前形状按「周长」放到地图中心 */
+$("btnShape").onclick = async () => {
+  const want = parseFloat($("inDist").value);
+  if (!isFinite(want) || want <= 0){
+    showTip("先填一个周长（米）");
+    return;
+  }
+  const r = await post("/api/route", {
+    shape: curShape, lat: view.lat, lon: view.lon,
+    size: want, ratio: null,
+  });
+  if (r.ok){
+    view.routeName = r.name || curShape;
+    showTip("已生成「" + (r.name || curShape) + "」· " +
+            (r.total / 1000).toFixed(2) + " km · 切到「拖动」可以移动");
+    await refresh(true);
+    fitRoute();
+    setMode("move");
+  } else {
+    showTip("生成失败：" + (r.error || "未知"));
+  }
+};
+
+async function saveMovedRoute(){
+  const pts = view.route.map(p => [p[0], p[1]]);
+  const r = await post("/api/route", { points: pts, name: view.routeName });
+  if (r.ok){
+    view.routeName = r.name || view.routeName;
+    showTip("已移动 · " + (r.total / 1000).toFixed(2) + " km —— 想留着就点「保存当前」");
+    // 只同步数据、不动视野：传 false 才不会触发 fitRoute 把镜头拉走
+    refresh(false);
+  } else {
+    showTip("移动失败：" + (r.error || "未知"));
+  }
+}
+
+/* ============================ 提示条 ============================ */
+let tipTimer = null;
+function showTip(s){
+  const el = $("tip");
+  el.textContent = s;
+  el.style.display = "block";
+  clearTimeout(tipTimer);
+  tipTimer = setTimeout(hideTip, 3200);
+}
+function hideTip(){ $("tip").style.display = "none"; }
+
+/* ============================ 后端通信 ============================ */
+const state = {
+  style: 8, speed: 2.8, hz: 1,
+  running: false, paused: false,
+  since: 0, total: 0, points: 0,
+  routeFile: "", routesKey: "",
+  finishedSaid: false,
+};
+
+async function get(url){
+  try { return await (await fetch(url, { cache: "no-store" })).json(); }
+  catch (e){ return null; }
+}
+async function post(url, body){
+  try {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}),
+    });
+    return await r.json();
+  } catch (e){ return { ok: false, error: String(e) }; }
+}
+
+let lastMarkerKey = "";
+let lastSent = -1;
+
+async function refresh(force){
+  const d = await get("/api/state?since=" + state.since);
+  if (!d) return;
+
+  /* 日志 */
+  if (d.logs && d.logs.length){
+    const box = $("log");
+    const atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 30;
+    d.logs.forEach(e => {
+      state.since = Math.max(state.since, e.i);
+      const div = document.createElement("div");
+      div.innerHTML = '<span class="t">' + e.t + '</span>' + escapeHtml(e.m);
+      box.appendChild(div);
+    });
+    while (box.children.length > 300) box.removeChild(box.firstChild);
+    if (atBottom) box.scrollTop = box.scrollHeight;
+  }
+
+  /* 路线 */
+  if (force || !view.route.length || d.route.length !== view.route.length){
+    const changed = d.route.length !== view.route.length
+                 || !view.route.length
+                 || d.route[0][0] !== view.route[0][0]
+                 || d.route[0][1] !== view.route[0][1];
+    view.route = d.route.map(p => [p[0], p[1]]);
+    state.points = d.route.length;
+    view.routeName = d.routeName || view.routeName;
+    $("vPts").textContent = d.route.length + " 点";
+    if (changed){          // 换了路线就把旧轨迹清掉，免得叠在一起看不懂
+      view.track = [];
+      view.marker = null;
+      lastMarkerKey = "";
+    }
+    if (force) fitRoute();
+    draw();
+  }
+
+  /* 下拉框跟随后端：列表变了就重建，当前路线变了就选中 */
+  const listKey = (d.routes || []).map(r => r.file).join("|")
+                + "|" + (d.routeFile ? "" : "tmp");
+  if (listKey !== state.routesKey){
+    state.routesKey = listKey;
+    fillRoutes(d.routes || [], d.routeFile || "", d.routeName);
+  } else if (d.routeFile && $("selRoute").value !== d.routeFile){
+    const has = Array.from($("selRoute").options).some(o => o.value === d.routeFile);
+    if (has) $("selRoute").value = d.routeFile;
+  } else if (!d.routeFile && $("selRoute").value !== ""){
+    $("selRoute").value = "";
+  }
+
+  /* 预设形状按钮（后端给什么就渲染什么） */
+  if (d.shapes && d.shapes.length) renderShapes(d.shapes);
+
+  /* 底图样式 */
+  if (d.style !== state.style){
+    state.style = d.style;
+    tiles.clear();
+    document.querySelectorAll("#segStyle button").forEach(b => {
+      b.classList.toggle("on", Number(b.dataset.style) === state.style);
+    });
+    draw();
+  }
+
+  /* 运行态 */
+  const r = d.runner;
+  state.speed = r.speed; state.hz = r.hz;
+  state.running = r.running; state.paused = r.paused;
+  state.total = r.total;
+
+  $("vTotal").textContent = r.total >= 1000
+    ? (r.total / 1000).toFixed(2) + " km" : Math.round(r.total) + " m";
+  $("vRouteName").textContent = d.routeName || "—";
+  $("vSpeed").textContent = r.speed.toFixed(2);
+  $("vHz").textContent = r.hz;
+  $("vDist").textContent = (r.dist / 1000).toFixed(2) + " km";
+  $("vLap").textContent = r.lap;
+  $("vSent").textContent = r.sent;
+
+  /* 目标距离进度 */
+  const goal = r.goal || 0;
+  if (goal > 0){
+    const pct = Math.min(100, 100 * r.dist / goal);
+    $("vGoalPct").textContent = pct.toFixed(1) + "%  ("
+      + (r.dist / 1000).toFixed(2) + " / " + (goal / 1000).toFixed(1) + " km)";
+    $("vGoalPct").style.color = pct >= 100 ? "#5ee9a0" : "#8fd9b3";
+  } else {
+    $("vGoalPct").textContent = "不限";
+    $("vGoalPct").style.color = "#6d7c99";
+  }
+  if (r.finished && !state.finishedSaid){
+    state.finishedSaid = true;
+    showTip("已跑够 " + (goal / 1000).toFixed(1) + " km，自动停了");
+  }
+  if (!r.finished) state.finishedSaid = false;
+
+  const paceSec = r.speed > 0 ? 1000 / r.speed : 0;
+  $("vPace").textContent = paceSec ? fmtPace(paceSec) : "—";
+  const slider = $("rngPace");
+  if (document.activeElement !== slider){
+    slider.value = String(clamp(Math.round(paceSec), 180, 900));
+  }
+
+  $("btnStart").disabled = r.running && !r.paused;
+  $("btnPause").disabled = !r.running;
+  $("btnStop").disabled = !r.running;
+  $("btnStart").textContent = r.paused ? "▶ 继续" : "▶ 开始";
+
+  /* 标记 */
+  if (r.currentGcj){
+    const key = r.currentGcj[0].toFixed(7) + "," + r.currentGcj[1].toFixed(7);
+    if (key !== lastMarkerKey){
+      // 换路线/重新开始后 sent 会归零，此时旧轨迹要丢掉，否则会拉出一条长直线
+      if (r.sent < lastSent) { view.track = []; }
+      lastSent = r.sent;
+      lastMarkerKey = key;
+      view.marker = r.currentGcj;
+      view.track.push(r.currentGcj);
+      if (view.track.length > 4000) view.track.shift();
+      $("vCur").textContent = r.current[0].toFixed(5) + ", " + r.current[1].toFixed(5);
+      draw();
+    }
+  }
+
+  /* DDI */
+  const ddi = d.ddi || {};
+  const el = $("vDdi");
+  if (ddi.state === "mounted"){
+    el.innerHTML = '<span class="pill ok">已挂载</span>';
+  } else if (ddi.state === "missing"){
+    el.innerHTML = '<span class="pill no">未挂载</span>';
+  } else if (ddi.state === "error"){
+    el.innerHTML = '<span class="pill no">出错</span>';
+  } else {
+    el.innerHTML = '<span class="pill wait"><span class="spinner"></span> 检查中</span>';
+  }
+  $("vDev").textContent = ddi.udid ? "…" + ddi.udid.slice(-4) : "—";
+
+  if (r.err){
+    showTip("错误：" + r.err);
+  }
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+}
+
+/* ============================ 控件绑定 ============================ */
+$("rngPace").addEventListener("input", e => {
+  const sec = Number(e.target.value);
+  $("vPace").textContent = fmtPace(sec);
+  $("vSpeed").textContent = (1000 / sec).toFixed(2);
+});
+$("rngPace").addEventListener("change", async e => {
+  const sec = Number(e.target.value);
+  await post("/api/speed", { speed: 1000 / sec });
+});
+document.querySelectorAll("[data-pace]").forEach(b => {
+  b.onclick = async () => {
+    const sec = Number(b.dataset.pace);
+    $("rngPace").value = String(sec);
+    $("vPace").textContent = fmtPace(sec);
+    $("vSpeed").textContent = (1000 / sec).toFixed(2);
+    await post("/api/speed", { speed: 1000 / sec });
+  };
+});
+
+$("selHz").addEventListener("change", async e => {
+  await post("/api/hz", { hz: Number(e.target.value) });
+});
+
+/* 目标距离 */
+async function applyGoal(){
+  const km = parseFloat($("inGoal").value) || 0;
+  const r = await post("/api/goal", { goal: km * 1000 });
+  if (r.ok){
+    showTip(km > 0 ? "跑够 " + km.toFixed(1) + " km 自动停" : "不限距离，一直循环");
+    refresh();
+  }
+}
+$("inGoal").addEventListener("change", applyGoal);
+$("inGoal").addEventListener("keydown", e => { if (e.key === "Enter") applyGoal(); });
+document.querySelectorAll("[data-goal]").forEach(b => {
+  b.onclick = async () => {
+    $("inGoal").value = b.dataset.goal;
+    document.querySelectorAll("[data-goal]").forEach(x =>
+      x.classList.toggle("on", x === b));
+    await applyGoal();
+  };
+});
+
+$("btnStart").onclick = async () => {
+  const r = await post("/api/start", {});
+  if (!r.ok) showTip("启动失败：" + (r.error || "未知"));
+  else showTip("开始推点");
+  refresh();
+};
+$("btnPause").onclick = async () => {
+  const r = await post("/api/pause", {});
+  showTip(r.paused ? "已暂停" : "已继续");
+  refresh();
+};
+$("btnStop").onclick = async () => {
+  await post("/api/stop", {});
+  view.track = [];
+  view.marker = null;
+  lastMarkerKey = "";
+  showTip("已停止");
+  refresh(true);
+};
+$("btnReset").onclick = async () => {
+  await post("/api/reset", {});
+  showTip("已发送『恢复真实定位』");
+  refresh();
+};
+$("btnDdi").onclick = async () => {
+  await post("/api/ddi", { mount: false });
+  showTip("正在检查 DDI ...");
+  refresh();
+};
+$("btnDdiMount").onclick = async () => {
+  await post("/api/ddi", { mount: true });
+  showTip("正在挂载 DDI，可能要十几秒 ...");
+  refresh();
+};
+
+$("selRoute").onchange = async () => {
+  const f = $("selRoute").value;
+  if (!f) return;                       // 占位项「未保存」，不加载
+  const r = await post("/api/route", { file: f });
+  if (r.ok){
+    showTip("已切换到：" + (r.name || f) + " · " + (r.total / 1000).toFixed(2) + " km");
+    await refresh(true);
+    fitRoute();
+  } else showTip("加载失败：" + (r.error || "未知"));
+};
+
+$("btnReload").onclick = async () => {
+  const f = $("selRoute").value;
+  if (!f){ showTip("当前是未保存的路线，先「保存当前」或选一条文件"); return; }
+  const r = await post("/api/route", { file: f });
+  if (r.ok){
+    showTip("已加载：" + (r.total / 1000).toFixed(2) + " km");
+    refresh(true);
+  }
+};
+$("btnSave").onclick = async () => {
+  if (view.route.length < 3){ showTip("路线点太少"); return; }
+  const def = "route-draw-" + String(Date.now()).slice(-6);
+  const name = prompt("给这条路线起个名字（下次启动会自动用它）", def);
+  if (name === null) return;
+  const r = await post("/api/save", { points: view.route, name: name });
+  if (r.ok){
+    showTip("已保存：" + (r.name || r.file));
+    await reloadRouteList(r.file);
+    refresh(true);
+  } else showTip("保存失败：" + (r.error || "未知"));
+};
+$("btnDel").onclick = async () => {
+  const f = $("selRoute").value;
+  if (!f){ showTip("先选一条路线"); return; }
+  if (!confirm("确定删除这条路线？\n" + f)) return;
+  const r = await post("/api/delete", { file: f });
+  if (r.ok){ showTip("已删除：" + f); await reloadRouteList(""); }
+  else showTip("删除失败：" + (r.error || "未知"));
+};
+
+/* 重新拉一次路线列表，并选中指定文件 */
+async function reloadRouteList(selFile){
+  const d = await get("/api/state?since=0");
+  if (!d) return;
+  state.routesKey = (d.routes || []).map(r => r.file).join("|")
+                  + "|" + (d.routeFile ? "" : "tmp");
+  fillRoutes(d.routes || [], selFile || d.routeFile || "", d.routeName);
+}
+
+function fillRoutes(routes, selFile, routeName){
+  const sel = $("selRoute");
+  const keep = selFile || sel.value;
+  sel.innerHTML = "";
+  // 预设形状 / 拖动后的路线还没存成文件，用一个占位项表示「当前不是文件」
+  if (!selFile){
+    const o = document.createElement("option");
+    o.value = ""; o.textContent = "（未保存：" + (routeName || "自定义路线") + "）";
+    o.dataset.tmp = "1";
+    sel.appendChild(o);
+  }
+  routes.forEach(rt => {
+    const o = document.createElement("option");
+    o.value = rt.file; o.textContent = rt.name;
+    sel.appendChild(o);
+  });
+  if (keep){
+    for (const o of sel.options){
+      if (o.value === keep){ sel.value = keep; break; }
+    }
+  }
+  if (!selFile) sel.value = "";
+}
+
+document.querySelectorAll("#segStyle button").forEach(b => {
+  b.onclick = async () => {
+    await post("/api/style", { style: Number(b.dataset.style) });
+    state.style = Number(b.dataset.style);
+    tiles.clear();
+    document.querySelectorAll("#segStyle button").forEach(x => {
+      x.classList.toggle("on", x === b);
+    });
+    draw();
+  };
+});
+
+/* 键盘 */
+window.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  if (e.key === "+" || e.key === "=") zoomAt(view.w/2, view.h/2, 1);
+  if (e.key === "-" || e.key === "_") zoomAt(view.w/2, view.h/2, -1);
+  if (e.key === "Escape"){ setMode("view"); hideTip(); }
+  if (e.key === " "){ e.preventDefault(); $("btnPause").click(); }
+});
+
+/* ============================ 启动 ============================ */
+window.addEventListener("resize", resize);
+
+(async function boot(){
+  resize();
+  const d = await get("/api/state?since=0");
+  if (d){
+    state.style = d.style;
+    document.querySelectorAll("#segStyle button").forEach(b => {
+      b.classList.toggle("on", Number(b.dataset.style) === state.style);
+    });
+    const sel = $("selRoute");
+    fillRoutes(d.routes || [], d.routeFile || "", d.routeName);
+    view.route = d.route.map(p => [p[0], p[1]]);
+    state.points = d.route.length;
+    view.routeName = d.routeName || view.routeName;
+    $("vPts").textContent = d.route.length + " 点";
+    state.since = 0;
+    fitRoute();
+    refresh(true);
+  }
+  setInterval(() => refresh(false), 700);
+  setInterval(() => { if (view.marker) draw(); }, 600);   // 脉冲动画
+})();
+</script>
+</body>
+</html>

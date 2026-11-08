@@ -1,0 +1,11 @@
+# 统一按 LF 存仓库，checkout 时按平台
+* text=auto eol=lf
+
+# Windows 批处理必须 CRLF，否则某些环境会解析出错
+*.bat text eol=crlf
+
+# 图片/二进制
+*.png binary
+*.jpg binary
+*.dmg binary
+*.sig binary

@@ -1,0 +1,38 @@
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 运行时产物
+tilecache/
+gui.log
+*.log
+last_route.json
+route-out-wgs.json
+
+# DDI 镜像（体积大、有版权，不随仓库分发）
+ddi/
+*.dmg
+*.sig
+
+# 用户自己画的路线（随仓库分发的示例 example-*.json 会提交）
+route-*.json
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# iOS 配对证书（含私钥，绝对不能提交）
+_pemt/
+*.pem
+*.key
+
+# 临时验证产物
+_*.png
+_*.js
+_*.py
+_*.cjs
+_*.mjs
