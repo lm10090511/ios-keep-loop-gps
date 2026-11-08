@@ -5,6 +5,11 @@
 
 > 只做定位注入。不修改任何 App、不注入进程、不 hook。
 
+> **⚠️ 兼容性声明：本项目只在 iPhone 7 Plus（iOS 15.7.3）上做过实测。**
+> 其它机型、其它 iOS 版本**都没有验证过**。理论上只要 DDI 能挂上、系统里有
+> `com.apple.dt.simulatelocation` 服务就能用，但实际能不能跑、会不会崩、坐标准不准，
+> 作者一概不知道。用别的机器请自己先小范围试，出问题欢迎提 Issue 附上机型与 iOS 版本。
+
 ---
 
 ## ⚠️ 关于收费：本项目完全免费
@@ -43,7 +48,7 @@ App 侧分辨不出来，所以里程、配速、轨迹都能正常累计。
 |---|---|
 | 电脑 | Windows 10/11（本项目在 Win11 上开发） |
 | Python | 3.9+，**只用标准库**，无需 `pip install` |
-| 手机 | iPhone，iOS 12+（开发测试机是 iOS 15.7.3） |
+| 手机 | iPhone，iOS 12+。**仅在 iPhone 7 Plus + iOS 15.7.3 上实测过**，其它机型/版本未验证 |
 | 线 | 一根能传数据的 Lightning/USB-C 线 |
 | 其它 | 电脑装了 **iTunes** 或 **Apple Mobile Device Support**（提供 usbmuxd） |
 
@@ -437,7 +442,8 @@ lockdown 会话可以长期复用，但**不要发 `StopService`**（会让整�
 
 ## 已知限制
 
-- 只在 **iOS 15.7.3 + Windows 11** 上实测过。其它版本理论可行，但 DDI 版本要对上。
+- **只在 iPhone 7 Plus（iOS 15.7.3）+ Windows 11 上实测过。** 其它 iPhone 机型、
+  其它 iOS 版本理论可行，但完全没验证过；DDI 版本要对上，否则挂不上。
 - iOS 17 之后 DDI 机制有变化，需要挂载后额外推 dylib，本项目没做（`mount_ddi_auto.py`
   里会提示 `Unsupported`）。
 - 一次只能连一台手机（usbmux 第一个匹配的设备）。
