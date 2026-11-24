@@ -613,7 +613,7 @@ class Runner:
 
     def _ensure_ps(self):
         if self.ps is None:
-            self.ps = M.PointStream(udid=None)
+            self.ps = M.make_point_stream(udid=None)
         self.ps.ensure()
 
     def _run(self):
@@ -661,7 +661,7 @@ class Runner:
                         break
                 try:
                     self._ensure_ps()
-                    M.send_point(self.ps.sock, lat, lon)
+                    self.ps.point(lat, lon)
                     lost = 0
                 except Exception as e:
                     lost += 1
@@ -1126,7 +1126,7 @@ class App:
     def _reset(self):
         def work():
             try:
-                ps = M.PointStream(udid=None)
+                ps = M.make_point_stream(udid=None)
                 ps.reset()
                 ps.close()
                 self._log_async("已发送『恢复真实定位』")

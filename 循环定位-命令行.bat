@@ -11,6 +11,7 @@ if not exist "ios_loop_wizard.py" (
 set "PY=py -3"
 where py >nul 2>nul
 if errorlevel 1 set "PY=python"
+if exist ".venv\Scripts\python.exe" set "PY=.venv\Scripts\python.exe"
 
 %PY% -X utf8 ios_loop_wizard.py
 pause

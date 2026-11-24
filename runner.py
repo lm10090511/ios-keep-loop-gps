@@ -235,7 +235,10 @@ class Runner:
 
     def _ensure_ps(self):
         if self.ps is None:
-            self.ps = M.PointStream(udid=None)
+            self.ps = M.make_point_stream(udid=None)
+            if self.ps.__class__.__name__ == "DvtPointStream" and self.auto_kill:
+                self.auto_kill = False
+                self._log("iOS 17+ 自动结束 Keep 尚未适配；跑够后请在手机上手动结束。")
         self.ps.ensure()
 
     def _start_kill(self, bundle):
@@ -297,7 +300,7 @@ class Runner:
                     try:
                         self._ensure_ps()
                         if hold:
-                            M.send_point(self.ps.sock, hold[0], hold[1])
+                            self.ps.point(hold[0], hold[1])
                         self.lost = 0
                     except Exception as e:
                         self.lost += 1
@@ -336,7 +339,7 @@ class Runner:
                     break
                 try:
                     self._ensure_ps()
-                    M.send_point(self.ps.sock, lat, lon)
+                    self.ps.point(lat, lon)
                     self.lost = 0
                 except Exception as e:
                     self.lost += 1
@@ -399,7 +402,10 @@ class Runner:
                 self.ps.close()
             except Exception:
                 pass
-        self._flush_last_point()
+        if self.ps and self.ps.__class__.__name__ == "DvtPointStream":
+            self.forget_last_point()
+        else:
+            self._flush_last_point()
 
     # -- 给界面读的快照 ----------------------------------------------------- #
     def snapshot(self):

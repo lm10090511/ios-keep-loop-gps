@@ -113,7 +113,7 @@ def t_routes():
     import ios_loop_gps as M
     import coord
     files = sorted(f for f in glob.glob("*.json")
-                   if not f.startswith(("last_route", "route-"))
+                   if not f.startswith(("last_route", "last_point", "route-"))
                    and f != "package.json")
     if not files:
         bad("有路线文件", "一个都没有")
@@ -287,8 +287,8 @@ def t_web():
                 ok("POST /api/search", "%s %.6f,%.6f" % (hit["name"], hit["lat"], hit["lon"]))
             else:
                 bad("地名搜索坐标", "%s %.6f,%.6f 偏离天安门" % (hit["name"], hit["lat"], hit["lon"]))
-        elif r.get("ok") is False:
-            skip("地名搜索（网络不通）", str(r.get("error"))[:40])
+        elif r.get("ok") is False or r.get("results") == []:
+            skip("地名搜索（外部服务无结果）", str(r.get("error", "空结果"))[:40])
         else:
             bad("POST /api/search", str(r))
 
@@ -452,22 +452,22 @@ def t_privacy():
     else:
         bad("PIL 是可选的", "import 没被 try 包住")
 
-    # 除 PIL 外不应有第三方 import
+    # iOS 17+ 后端可选用 pymobiledevice3；旧版路径仍只用标准库。
     third = set()
     for f in _py_files():
         txt = io.open(f, encoding="utf-8").read()
         for m in re.finditer(r"^\s*(?:from|import)\s+([a-zA-Z_][\w.]*)", txt, re.M):
             top = m.group(1).split(".")[0]
             third.add(top)
-    local = {"coord", "ios_loop_gps", "runner", "check_ddi",
+    local = {"coord", "ios_loop_gps", "ios17_location", "runner", "check_ddi",
              "mount_ddi_auto", "web_gui", "gps_gui", "presets", "geosearch",
              "killapp"}
     std = set(sys.stdlib_module_names) if hasattr(sys, "stdlib_module_names") else set()
-    unknown = sorted(third - local - std - {"PIL"})
+    unknown = sorted(third - local - std - {"PIL", "pymobiledevice3"})
     if unknown:
         bad("只用标准库", "可疑第三方: %s" % unknown)
     else:
-        ok("只用标准库", "（PIL 可选）")
+        ok("依赖符合预期", "（PIL、pymobiledevice3 可选）")
 
 
 # ---------------------------------------------------------------- 7. 设备

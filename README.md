@@ -8,14 +8,24 @@
 （不收费、不收捐赠，Star 就是最好的回报，也能让更多人搜到它）
 
 在 iPhone 上沿一条闭合路线**循环**移动定位，用于跑步类 App 的轨迹/里程测试。
-纯 Python 标准库实现，**不需要越狱、不需要 root、不需要装 App**，只靠 USB 线连电脑。
+旧版 iOS 连接使用 Python 标准库；iOS 17+ 连接需要安装 `pymobiledevice3`。不需要越狱或在手机上安装 App。
+
+### iOS 17+ 实验性连接
+
+在手机上启用「设置 → 隐私与安全性 → 开发者模式」，重启后确认启用，并通过 USB 信任电脑。Windows 上可在项目目录运行：
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install pymobiledevice3
+.\.venv\Scripts\python.exe ios_loop_gps.py --probe
+.\.venv\Scripts\python.exe web_gui.py
+```
+
+程序会按设备系统版本选择定位通道：iOS 17+ 使用 DVT，旧版保留原实现。iOS 17+ 不使用本项目的旧 DDI 挂载脚本。当前在 iPhone 15 Pro／iOS 26.4.1 上完成了短时连续推点、清除定位，使用者也确认 Keep 地图与里程正常；尚未验证其他机型和版本。自动结束 Keep 暂未适配此通道，跑够后请在手机上手动结束运动，再点网页「停止」恢复真实定位。
 
 > 只做定位注入。不修改任何 App、不注入进程、不 hook。
 
-> **⚠️ 兼容性声明：本项目只在 iPhone 7 Plus（iOS 15.7.3）上做过实测。**
-> 其它机型、其它 iOS 版本**都没有验证过**。理论上只要 DDI 能挂上、系统里有
-> `com.apple.dt.simulatelocation` 服务就能用，但实际能不能跑、会不会崩、坐标准不准，
-> 作者一概不知道。用别的机器请自己先小范围试，出问题欢迎提 Issue 附上机型与 iOS 版本。
+> **⚠️ 兼容性声明：**旧版定位通道由原作者在 iPhone 7 Plus（iOS 15.7.3）实测；新增 DVT 通道目前仅在 iPhone 15 Pro（iOS 26.4.1）实测。其它机型／版本请先小范围试，出问题欢迎提 Issue 附上机型与 iOS 版本。
 
 ---
 
@@ -86,8 +96,8 @@ App 侧分辨不出来，所以里程、配速、轨迹都能正常累计。
 | 项 | 要求 |
 |---|---|
 | 电脑 | Windows 10/11（本项目在 Win11 上开发） |
-| Python | 3.9+，**只用标准库**，无需 `pip install` |
-| 手机 | iPhone，iOS 12+。**仅在 iPhone 7 Plus + iOS 15.7.3 上实测过**，其它机型/版本未验证 |
+| Python | 3.9+；iOS 17+ 需额外安装 `pymobiledevice3` |
+| 手机 | iPhone，iOS 12+；旧通道实测 iPhone 7 Plus／iOS 15.7.3，新通道实测 iPhone 15 Pro／iOS 26.4.1 |
 | 线 | 一根能传数据的 Lightning/USB-C 线 |
 | 其它 | 电脑装了 **iTunes** 或 **Apple Mobile Device Support**（提供 usbmuxd） |
 
@@ -225,7 +235,7 @@ py -3 -X utf8 killapp.py --list                        # 列出手机上正在�
 点包永远发得出去、**不会报任何错**。但真正消费坐标的是 `locationd` 里的
 `DTLocationsimulation.dylib`，**只有 DDI（DeveloperDiskImage）挂载后才会被加载**。
 
-DDI 没挂 → 点包进黑洞 → 脚本一切正常、手机地图一动不动。
+在 iOS 17 以下，DDI 没挂可能导致点包无效；iOS 17+ 使用上文的 DVT 通道。
 
 判断方法：
 
@@ -339,7 +349,7 @@ iPhone 的 `simulatelocation` 要的是 **WGS-84**。国内两者差 400–600 �
 | 现象 | 原因 / 处理 |
 |---|---|
 | `--probe` 报「没有发现 iOS 设备」 | 没插线 / 没信任 / 没装 iTunes 或 Apple Mobile Device Support |
-| 脚本在跑，但手机地图不动 | **DDI 没挂载**，跑 `check_ddi.py` 确认，再 `mount_ddi_auto.py` |
+| 脚本在跑，但手机地图不动 | iOS 17 以下检查 DDI；iOS 17+ 先检查开发者模式，再运行 `ios_loop_gps.py --probe` |
 | 位置偏了 400–600 米 | 坐标系搞错，路线文件加 `"_坐标系": "GCJ-02"` |
 | 手机彻底没有定位了 | 跑 `recover.py`；还不行就拔线 → 设置 → 通用 → 传输或还原 → **还原位置与隐私** → 重启 |
 | 定位在乱闪 | 开了两个进程同时推点，先全部停掉再启一个（`web_gui.py` 有单实例保护） |

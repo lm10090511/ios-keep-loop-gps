@@ -11,6 +11,7 @@ if not exist "web_gui.py" (
 set "PY=py -3"
 where py >nul 2>nul
 if errorlevel 1 set "PY=python"
+if exist ".venv\Scripts\python.exe" set "PY=.venv\Scripts\python.exe"
 
 echo ============================================================
 echo  循环虚拟定位 - 网页版

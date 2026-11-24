@@ -553,6 +553,36 @@ class PointStream:
         self.ld = None
 
 
+def device_version(udid=None):
+    """Read the selected device's iOS version over lockdown."""
+    mux = Usbmux()
+    dev = _pick_device(mux, udid)
+    pairing = load_pairing(dev["udid"])
+    if not pairing:
+        raise RuntimeError("找不到设备配对记录")
+    ld = Lockdown(mux, dev, pairing).open()
+    try:
+        ld_send(ld.sock, {"Label": LABEL, "Request": "GetValue", "Key": "ProductVersion"})
+        version = str(ld_recv(ld.sock).get("Value", ""))
+    finally:
+        ld.close()
+    if not version:
+        raise RuntimeError("无法读取 iOS 系统版本")
+    return dev["udid"], version
+
+
+def make_point_stream(udid=None):
+    """Select the legacy service or the iOS 17+ tunnel by device version."""
+    selected_udid, version = device_version(udid)
+    if int(version.split(".")[0]) >= 17:
+        try:
+            from ios17_location import DvtPointStream
+        except ImportError as exc:
+            raise RuntimeError("iOS 17+ 需要安装 pymobiledevice3") from exc
+        return DvtPointStream(udid=selected_udid)
+    return PointStream(udid=selected_udid)
+
+
 # --------------------------------------------------------------------------- #
 # 路线：加载 / 插值 / 循环
 # --------------------------------------------------------------------------- #
@@ -714,6 +744,15 @@ def _pick_device(mux, udid):
 
 
 def cmd_probe(args):
+    selected_udid, version = device_version(args.udid)
+    if int(version.split(".")[0]) >= 17:
+        ps = make_point_stream(selected_udid)
+        try:
+            ps.ensure()
+            log("OK  iOS %s DVT 定位服务可用 (%s)" % (version, selected_udid))
+            return 0
+        finally:
+            ps.close(clear=False)
     log("=== 1. usbmuxd ===")
     mux = Usbmux()
     try:
@@ -791,7 +830,7 @@ def _open_stream(args):
 
 
 def cmd_reset(args):
-    ps = PointStream(udid=args.udid)
+    ps = make_point_stream(udid=args.udid)
     ps.reset()
     ps.close()
     log("已向 %s 发送『恢复真实定位』" % (ps.dev["udid"] if ps.dev else "设备"))
@@ -808,7 +847,7 @@ def cmd_run(args):
         % (args.speed, (1000.0 / args.speed) / 60.0, args.hz,
            "无限" if args.loops <= 0 else args.loops))
 
-    ps = PointStream(udid=args.udid)
+    ps = make_point_stream(udid=args.udid)
     for i in range(1, 61):
         try:
             ps.ensure()
