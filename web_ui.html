@@ -311,7 +311,7 @@
     <!-- 状态 -->
     <div class="sec">
       <h2>状态</h2>
-      <div class="kv"><span>DDI</span><span id="vDdi"><span class="pill wait">检查中</span></span></div>
+      <div class="kv"><span>定位服务</span><span id="vDdi"><span class="pill wait">检查中</span></span></div>
       <div class="kv"><span>设备</span><span id="vDev">—</span></div>
       <div class="kv"><span>运行</span><span id="vRun">未开始</span></div>
       <div class="kv"><span>已跑</span><span class="big-num" id="vDist">0.00 km</span></div>
@@ -319,8 +319,8 @@
       <div class="kv"><span>已发点</span><span id="vSent">0</span></div>
       <div class="kv"><span>当前坐标</span><span id="vCur" style="font-size:12px">—</span></div>
       <div class="run-row" style="margin-top:10px">
-        <button id="btnDdi" class="btn-sm" style="flex:1">检查 DDI</button>
-        <button id="btnDdiMount" class="btn-sm" style="flex:1">挂载 DDI</button>
+        <button id="btnDdi" class="btn-sm" style="flex:1">检查定位服务</button>
+        <button id="btnDdiMount" class="btn-sm" style="flex:1">挂载旧版 DDI</button>
       </div>
     </div>
 
@@ -1223,7 +1223,9 @@ async function refresh(force){
   /* DDI */
   const ddi = d.ddi || {};
   const el = $("vDdi");
-  if (ddi.state === "mounted"){
+  if (ddi.state === "ready"){
+    el.innerHTML = '<span class="pill ok">DVT 模式</span>';
+  } else if (ddi.state === "mounted"){
     el.innerHTML = '<span class="pill ok">已挂载</span>';
   } else if (ddi.state === "missing"){
     el.innerHTML = '<span class="pill no">未挂载</span>';

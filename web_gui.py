@@ -286,6 +286,14 @@ def check_ddi_bg(mount=False):
         DDI["checking"] = True
         DDI["state"] = "checking"
     try:
+        selected_udid, version = M.device_version()
+        if int(version.split(".")[0]) >= 17:
+            ST.runner.set_auto_kill(False)
+            with DDI_LOCK:
+                DDI.update(state="ready", detail="iOS 17+ 使用 DVT 通道，无需旧 DDI",
+                           udid=selected_udid, checking=False)
+            log("iOS %s 使用 DVT 定位通道，无需旧 DDI" % version)
+            return
         mux = M.Usbmux()
         dev = M._pick_device(mux, None)
         pairing = M.load_pairing(dev["udid"])
@@ -531,7 +539,7 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/reset":
                 def work():
                     try:
-                        ps = M.PointStream(udid=None)
+                        ps = M.make_point_stream(udid=None)
                         ps.reset()
                         ps.close()
                         # 手机已经回到真实位置，我们不知道它在哪了 —— 清掉记录，
